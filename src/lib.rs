@@ -181,21 +181,26 @@ impl ExampleBase {
             elwp.set_control_flow(ControlFlow::Poll);
             match event {
                 Event::WindowEvent {
-                    event:
-                        WindowEvent::CloseRequested
-                        | WindowEvent::KeyboardInput {
-                            event:
-                                KeyEvent {
-                                    state: ElementState::Pressed,
-                                    logical_key: Key::Named(NamedKey::Escape),
-                                    ..
-                                },
-                            ..
-                        },
+                    event: window_event,
                     ..
-                } => {
-                    elwp.exit();
-                }
+                } => match window_event {
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        event:
+                            KeyEvent {
+                                state: ElementState::Pressed,
+                                logical_key: Key::Named(NamedKey::Escape),
+                                ..
+                            },
+                        ..
+                    } => {
+                        elwp.exit();
+                    }
+                    WindowEvent::Resized(new_size) => {
+                        println!("Resized to {:?}", new_size);
+                    }
+                    _ => (),
+                },
                 Event::AboutToWait => f(),
                 _ => (),
             }
