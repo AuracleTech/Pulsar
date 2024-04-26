@@ -527,7 +527,7 @@ impl ExampleBase {
                     .swapchain_loader
                     .acquire_next_image(
                         self.swapchain,
-                        std::u64::MAX,
+                        u64::MAX,
                         self.present_complete_semaphore,
                         vk::Fence::null(),
                     )
