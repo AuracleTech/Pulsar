@@ -346,13 +346,9 @@ impl ExampleBase {
 
             let present_queue = device.get_device_queue(queue_family_index, 0);
 
-            let surface_format = surface_loader
-                .get_physical_device_surface_formats(pdevice, surface)
-                .unwrap()[0];
+            let (surface_format, surface_capabilities) =
+                ExampleBase::create_surface(&surface_loader, pdevice, surface);
 
-            let surface_capabilities = surface_loader
-                .get_physical_device_surface_capabilities(pdevice, surface)
-                .unwrap();
             let mut desired_image_count = surface_capabilities.min_image_count + 1;
             if surface_capabilities.max_image_count > 0
                 && desired_image_count > surface_capabilities.max_image_count
@@ -577,6 +573,24 @@ impl ExampleBase {
                 debug_utils_loader,
                 depth_image_memory,
             })
+        }
+    }
+
+    pub fn create_surface(
+        surface_loader: &surface::Instance,
+        pdevice: vk::PhysicalDevice,
+        surface: vk::SurfaceKHR,
+    ) -> (vk::SurfaceFormatKHR, vk::SurfaceCapabilitiesKHR) {
+        unsafe {
+            let surface_format = surface_loader
+                .get_physical_device_surface_formats(pdevice, surface)
+                .unwrap()[0];
+
+            let surface_capabilities = surface_loader
+                .get_physical_device_surface_capabilities(pdevice, surface)
+                .unwrap();
+
+            (surface_format, surface_capabilities)
         }
     }
 
