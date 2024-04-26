@@ -7,6 +7,8 @@
     unused_qualifications
 )]
 
+pub mod model;
+
 use std::{
     borrow::Cow, cell::RefCell, default::Default, error::Error, ffi, ops::Drop, os::raw::c_char,
 };

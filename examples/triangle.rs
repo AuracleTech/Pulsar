@@ -8,13 +8,8 @@ use std::mem;
 
 use ash::util::*;
 use ash::vk;
+use nhope::model::Vertex;
 use nhope::*;
-
-#[derive(Clone, Debug, Copy)]
-struct Vertex {
-    pos: [f32; 4],
-    color: [f32; 4],
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     unsafe {
