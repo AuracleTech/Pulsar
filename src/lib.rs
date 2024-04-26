@@ -197,7 +197,7 @@ impl ExampleBase {
                         elwp.exit();
                     }
                     WindowEvent::Resized(new_size) => {
-                        println!("Resized to {:?}", new_size);
+                        // Recreate surface
                     }
                     _ => (),
                 },
@@ -579,12 +579,31 @@ impl ExampleBase {
             })
         }
     }
-}
 
-impl Drop for ExampleBase {
-    fn drop(&mut self) {
+    // NOTE always wait device idle before destroying anyting
+    fn destroy_instance(&mut self) {
         unsafe {
-            self.device.device_wait_idle().unwrap();
+            self.destroy_surface();
+
+            self.device.destroy_device(None);
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_call_back, None);
+            self.instance.destroy_instance(None);
+        }
+    }
+
+    // NOTE always wait device idle before destroying anyting
+    fn destroy_surface(&mut self) {
+        unsafe {
+            self.destroy_swapchain();
+
+            self.surface_loader.destroy_surface(self.surface, None);
+        }
+    }
+
+    // NOTE always wait device idle before destroying anyting
+    fn destroy_swapchain(&mut self) {
+        unsafe {
             self.device
                 .destroy_semaphore(self.present_complete_semaphore, None);
             self.device
@@ -593,20 +612,28 @@ impl Drop for ExampleBase {
                 .destroy_fence(self.draw_commands_reuse_fence, None);
             self.device
                 .destroy_fence(self.setup_commands_reuse_fence, None);
+
             self.device.free_memory(self.depth_image_memory, None);
             self.device.destroy_image_view(self.depth_image_view, None);
             self.device.destroy_image(self.depth_image, None);
+
             for &image_view in self.present_image_views.iter() {
                 self.device.destroy_image_view(image_view, None);
             }
+
             self.device.destroy_command_pool(self.pool, None);
+
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain, None);
-            self.device.destroy_device(None);
-            self.surface_loader.destroy_surface(self.surface, None);
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_call_back, None);
-            self.instance.destroy_instance(None);
+        }
+    }
+}
+
+impl Drop for ExampleBase {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.device_wait_idle().unwrap();
+            self.destroy_instance();
         }
     }
 }
