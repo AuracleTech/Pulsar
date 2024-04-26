@@ -144,11 +144,18 @@ pub fn find_memorytype_index(
         .map(|(index, _memory_type)| index as _)
 }
 
+struct EngineSurface {
+    loader: surface::Instance,
+    surface: vk::SurfaceKHR,
+    format: vk::SurfaceFormatKHR,
+    capabilities: vk::SurfaceCapabilitiesKHR,
+    resolution: vk::Extent2D,
+}
+
 pub struct ExampleBase {
     pub entry: Entry,
     pub instance: Instance,
     pub device: Device,
-    pub surface_loader: surface::Instance,
     pub swapchain_loader: swapchain::Device,
     pub debug_utils_loader: debug_utils::Instance,
     pub window: winit::window::Window,
@@ -160,9 +167,7 @@ pub struct ExampleBase {
     pub queue_family_index: u32,
     pub present_queue: vk::Queue,
 
-    pub surface: vk::SurfaceKHR,
-    pub surface_format: vk::SurfaceFormatKHR,
-    pub surface_resolution: vk::Extent2D,
+    surface: EngineSurface,
 
     pub swapchain: vk::SwapchainKHR,
     pub present_images: Vec<vk::Image>,
@@ -206,7 +211,7 @@ impl ExampleBase {
         unsafe {
             let renderpass_attachments = [
                 vk::AttachmentDescription {
-                    format: self.surface_format.format,
+                    format: self.surface.format.format,
                     samples: vk::SampleCountFlags::TYPE_1,
                     load_op: vk::AttachmentLoadOp::CLEAR,
                     store_op: vk::AttachmentStoreOp::STORE,
@@ -262,8 +267,8 @@ impl ExampleBase {
                     let frame_buffer_create_info = vk::FramebufferCreateInfo::default()
                         .render_pass(renderpass)
                         .attachments(&framebuffer_attachments)
-                        .width(self.surface_resolution.width)
-                        .height(self.surface_resolution.height)
+                        .width(self.surface.resolution.width)
+                        .height(self.surface.resolution.height)
                         .layers(1);
 
                     self.device
@@ -444,12 +449,12 @@ impl ExampleBase {
             let viewports = [vk::Viewport {
                 x: 0.0,
                 y: 0.0,
-                width: self.surface_resolution.width as f32,
-                height: self.surface_resolution.height as f32,
+                width: self.surface.resolution.width as f32,
+                height: self.surface.resolution.height as f32,
                 min_depth: 0.0,
                 max_depth: 1.0,
             }];
-            let scissors = [self.surface_resolution.into()];
+            let scissors = [self.surface.resolution.into()];
             let viewport_state_info = vk::PipelineViewportStateCreateInfo::default()
                 .scissors(&scissors)
                 .viewports(&viewports);
@@ -549,7 +554,7 @@ impl ExampleBase {
                 let render_pass_begin_info = vk::RenderPassBeginInfo::default()
                     .render_pass(renderpass)
                     .framebuffer(framebuffers[present_index as usize])
-                    .render_area(self.surface_resolution.into())
+                    .render_area(self.surface.resolution.into())
                     .clear_values(&clear_values);
 
                 record_submit_commandbuffer(
@@ -1016,10 +1021,16 @@ impl ExampleBase {
                 pdevice,
                 device_memory_properties,
                 window,
-                surface_loader,
-                surface_format,
+
+                surface: EngineSurface {
+                    loader: surface_loader,
+                    surface,
+                    capabilities: surface_capabilities,
+                    format: surface_format,
+                    resolution: surface_resolution,
+                },
+
                 present_queue,
-                surface_resolution,
                 swapchain_loader,
                 swapchain,
                 present_images,
@@ -1033,7 +1044,6 @@ impl ExampleBase {
                 rendering_complete_semaphore,
                 draw_commands_reuse_fence,
                 setup_commands_reuse_fence,
-                surface,
                 debug_call_back,
                 debug_utils_loader,
                 depth_image_memory,
@@ -1076,7 +1086,9 @@ impl ExampleBase {
         unsafe {
             self.destroy_swapchain();
 
-            self.surface_loader.destroy_surface(self.surface, None);
+            self.surface
+                .loader
+                .destroy_surface(self.surface.surface, None);
         }
     }
 
