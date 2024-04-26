@@ -8,10 +8,28 @@ use std::mem;
 
 use ash::util::*;
 use ash::vk;
-use nhope::model::Vertex;
+use nhope::model::{Mesh, Vertex};
 use nhope::*;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    let triangle = Mesh {
+        vertices: vec![
+            Vertex {
+                pos: [-1.0, 1.0, 0.0, 1.0],
+                color: [0.0, 1.0, 0.0, 1.0],
+            },
+            Vertex {
+                pos: [1.0, 1.0, 0.0, 1.0],
+                color: [0.0, 0.0, 1.0, 1.0],
+            },
+            Vertex {
+                pos: [0.0, -1.0, 0.0, 1.0],
+                color: [1.0, 0.0, 0.0, 1.0],
+            },
+        ],
+        indices: vec![0, 1, 2],
+    };
+
     unsafe {
         let base = ExampleBase::new(1920, 1080)?;
         let renderpass_attachments = [
@@ -160,21 +178,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             .allocate_memory(&vertex_buffer_allocate_info, None)
             .unwrap();
 
-        let vertices = [
-            Vertex {
-                pos: [-1.0, 1.0, 0.0, 1.0],
-                color: [0.0, 1.0, 0.0, 1.0],
-            },
-            Vertex {
-                pos: [1.0, 1.0, 0.0, 1.0],
-                color: [0.0, 0.0, 1.0, 1.0],
-            },
-            Vertex {
-                pos: [0.0, -1.0, 0.0, 1.0],
-                color: [1.0, 0.0, 0.0, 1.0],
-            },
-        ];
-
         let vert_ptr = base
             .device
             .map_memory(
@@ -190,7 +193,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             mem::align_of::<Vertex>() as u64,
             vertex_input_buffer_memory_req.size,
         );
-        vert_align.copy_from_slice(&vertices);
+        vert_align.copy_from_slice(&triangle.vertices);
         base.device.unmap_memory(vertex_input_buffer_memory);
         base.device
             .bind_buffer_memory(vertex_input_buffer, vertex_input_buffer_memory, 0)
