@@ -595,7 +595,7 @@ impl ExampleBase {
     }
 
     // NOTE always wait device idle before destroying anyting
-    fn destroy_instance(&mut self) {
+    pub fn destroy_instance(&mut self) {
         unsafe {
             self.destroy_surface();
 
@@ -607,7 +607,7 @@ impl ExampleBase {
     }
 
     // NOTE always wait device idle before destroying anyting
-    fn destroy_surface(&mut self) {
+    pub fn destroy_surface(&mut self) {
         unsafe {
             self.destroy_swapchain();
 
@@ -616,7 +616,7 @@ impl ExampleBase {
     }
 
     // NOTE always wait device idle before destroying anyting
-    fn destroy_swapchain(&mut self) {
+    pub fn destroy_swapchain(&mut self) {
         unsafe {
             self.device
                 .destroy_semaphore(self.present_complete_semaphore, None);
