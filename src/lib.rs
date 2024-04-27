@@ -180,11 +180,14 @@ struct SwapchainResources {
 }
 
 pub struct Engine {
-    entry: Entry,
-    instance: Instance,
-    device: Device,
     event_loop: RefCell<EventLoop<()>>,
     window: winit::window::Window,
+    entry: Entry,
+
+    instance: Instance,
+    pdevices: Vec<vk::PhysicalDevice>,
+    surface_loader: surface::Instance,
+
     debug_utils_loader: debug_utils::Instance,
     debug_call_back: vk::DebugUtilsMessengerEXT,
 
@@ -192,11 +195,12 @@ pub struct Engine {
     device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     queue_family_index: u32,
 
-    surface_loader: surface::Instance,
     surface: EngineSurface,
 
     swapchain_loader: swapchain::Device,
     swapchain: EngineSwapchain,
+
+    device: Device,
 }
 
 impl Engine {
@@ -212,8 +216,25 @@ impl Engine {
                 .build(&event_loop)
                 .unwrap();
             let entry = Entry::linked();
-            let app_name = ffi::CStr::from_bytes_with_nul_unchecked(APP_NAME.as_bytes());
 
+            let app_name = ffi::CStr::from_bytes_with_nul_unchecked(APP_NAME.as_bytes());
+            let appinfo = vk::ApplicationInfo::default()
+                .application_name(app_name)
+                .application_version(0)
+                .engine_name(app_name)
+                .engine_version(0)
+                .api_version(vk::make_api_version(0, 1, 0, 0));
+            let mut extension_names =
+                ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())
+                    .unwrap()
+                    .to_vec();
+            extension_names.push(debug_utils::NAME.as_ptr());
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            {
+                extension_names.push(ash::khr::portability_enumeration::NAME.as_ptr());
+                // Enabling this extension is a requirement when using `VK_KHR_portability_subset`
+                extension_names.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
+            }
             let layer_names = [ffi::CStr::from_bytes_with_nul_unchecked(
                 b"VK_LAYER_KHRONOS_validation\0",
             )];
@@ -221,42 +242,25 @@ impl Engine {
                 .iter()
                 .map(|raw_name| raw_name.as_ptr())
                 .collect();
-
-            let mut extension_names =
-                ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())
-                    .unwrap()
-                    .to_vec();
-            extension_names.push(debug_utils::NAME.as_ptr());
-
-            #[cfg(any(target_os = "macos", target_os = "ios"))]
-            {
-                extension_names.push(ash::khr::portability_enumeration::NAME.as_ptr());
-                // Enabling this extension is a requirement when using `VK_KHR_portability_subset`
-                extension_names.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
-            }
-
-            let appinfo = vk::ApplicationInfo::default()
-                .application_name(app_name)
-                .application_version(0)
-                .engine_name(app_name)
-                .engine_version(0)
-                .api_version(vk::make_api_version(0, 1, 0, 0));
-
             let create_flags = if cfg!(any(target_os = "macos", target_os = "ios")) {
                 vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
             } else {
                 vk::InstanceCreateFlags::default()
             };
-
             let create_info = vk::InstanceCreateInfo::default()
                 .application_info(&appinfo)
                 .enabled_layer_names(&layers_names_raw)
                 .enabled_extension_names(&extension_names)
                 .flags(create_flags);
-
             let instance: Instance = entry
                 .create_instance(&create_info, None)
                 .expect("Instance creation error");
+
+            let pdevices = instance
+                .enumerate_physical_devices()
+                .expect("Physical device error");
+
+            let surface_loader = surface::Instance::new(&entry, &instance);
 
             let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
                 .message_severity(
@@ -270,11 +274,12 @@ impl Engine {
                         | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
                 )
                 .pfn_user_callback(Some(vulkan_debug_callback));
-
             let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
             let debug_call_back = debug_utils_loader
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
+
+            // SECTION SURFACE
             let surface = ash_window::create_surface(
                 &entry,
                 &instance,
@@ -283,10 +288,7 @@ impl Engine {
                 None,
             )
             .unwrap();
-            let pdevices = instance
-                .enumerate_physical_devices()
-                .expect("Physical device error");
-            let surface_loader = surface::Instance::new(&entry, &instance);
+
             let (pdevice, queue_family_index) = pdevices
                 .iter()
                 .find_map(|pdevice| {
@@ -313,6 +315,14 @@ impl Engine {
                 })
                 .expect("Couldn't find suitable device.");
             let queue_family_index = queue_family_index as u32;
+
+            let (surface_format, surface_capabilities) =
+                Engine::create_surface(&surface_loader, pdevice, surface);
+
+            let priorities = [1.0];
+            let queue_info = vk::DeviceQueueCreateInfo::default()
+                .queue_family_index(queue_family_index)
+                .queue_priorities(&priorities);
             let device_extension_names_raw = [
                 swapchain::NAME.as_ptr(),
                 #[cfg(any(target_os = "macos", target_os = "ios"))]
@@ -322,25 +332,25 @@ impl Engine {
                 shader_clip_distance: 1,
                 ..Default::default()
             };
-            let priorities = [1.0];
-
-            let queue_info = vk::DeviceQueueCreateInfo::default()
-                .queue_family_index(queue_family_index)
-                .queue_priorities(&priorities);
-
             let device_create_info = vk::DeviceCreateInfo::default()
                 .queue_create_infos(std::slice::from_ref(&queue_info))
                 .enabled_extension_names(&device_extension_names_raw)
                 .enabled_features(&features);
-
             let device: Device = instance
                 .create_device(pdevice, &device_create_info, None)
                 .unwrap();
 
-            let present_queue = device.get_device_queue(queue_family_index, 0);
+            let present_modes = surface_loader
+                .get_physical_device_surface_present_modes(pdevice, surface)
+                .unwrap();
+            let present_mode = present_modes
+                .iter()
+                .cloned()
+                .find(|&mode| mode == vk::PresentModeKHR::MAILBOX)
+                .unwrap_or(vk::PresentModeKHR::FIFO);
+            let swapchain_loader = swapchain::Device::new(&instance, &device);
 
-            let (surface_format, surface_capabilities) =
-                Engine::create_surface(&surface_loader, pdevice, surface);
+            let present_queue = device.get_device_queue(queue_family_index, 0);
 
             let mut desired_image_count = surface_capabilities.min_image_count + 1;
             if surface_capabilities.max_image_count > 0
@@ -363,15 +373,6 @@ impl Engine {
             } else {
                 surface_capabilities.current_transform
             };
-            let present_modes = surface_loader
-                .get_physical_device_surface_present_modes(pdevice, surface)
-                .unwrap();
-            let present_mode = present_modes
-                .iter()
-                .cloned()
-                .find(|&mode| mode == vk::PresentModeKHR::MAILBOX)
-                .unwrap_or(vk::PresentModeKHR::FIFO);
-            let swapchain_loader = swapchain::Device::new(&instance, &device);
 
             let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
                 .surface(surface)
@@ -541,6 +542,7 @@ impl Engine {
                 instance,
                 device,
                 queue_family_index,
+                pdevices,
                 pdevice,
                 device_memory_properties,
                 window,
