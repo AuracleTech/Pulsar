@@ -195,8 +195,6 @@ pub struct Engine {
     device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     queue_family_index: u32,
 
-    out_of_date_resources: bool,
-
     surface: EngineSurface,
 
     swapchain_loader: swapchain::Device,
@@ -557,8 +555,6 @@ impl Engine {
                 device_memory_properties,
                 queue_family_index,
                 pdevice,
-
-                out_of_date_resources: false,
 
                 surface: EngineSurface {
                     surface,
@@ -1025,9 +1021,7 @@ impl Engine {
                 match queue_present_result {
                     Ok(_) => {}
                     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                        // self.device.device_wait_idle().unwrap();
-                        // self.recreate_swapchain();
-                        // IMPLEMENT
+                        eprintln!("ERROR_OUT_OF_DATE_KHR caught");
                     }
                     Err(err) => panic!("Failed to present queue: {:?}", err),
                 }
@@ -1075,10 +1069,10 @@ impl Engine {
                     } => {
                         elwp.exit();
                     }
-                    WindowEvent::Resized(new_size) => {
-                        // IMPLEMENT
-                        // Recreate surface
-                    }
+                    WindowEvent::Resized(new_size) => unsafe {
+                        self.device.device_wait_idle().unwrap();
+                        // recreate resources
+                    },
                     _ => (),
                 },
                 Event::AboutToWait => f(),
