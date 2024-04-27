@@ -160,7 +160,7 @@ struct EngineSwapchain {
     present_image_views: Vec<vk::ImageView>,
 }
 
-pub struct ExampleBase {
+pub struct Engine {
     pub entry: Entry,
     pub instance: Instance,
     pub device: Device,
@@ -194,7 +194,7 @@ pub struct ExampleBase {
     pub setup_commands_reuse_fence: vk::Fence,
 }
 
-impl ExampleBase {
+impl Engine {
     pub fn looping(&mut self) {
         let triangle = Mesh {
             vertices: vec![
@@ -824,7 +824,7 @@ impl ExampleBase {
             let present_queue = device.get_device_queue(queue_family_index, 0);
 
             let (surface_format, surface_capabilities) =
-                ExampleBase::create_surface(&surface_loader, pdevice, surface);
+                Engine::create_surface(&surface_loader, pdevice, surface);
 
             let mut desired_image_count = surface_capabilities.min_image_count + 1;
             if surface_capabilities.max_image_count > 0
@@ -1116,19 +1116,19 @@ impl ExampleBase {
             self.device.destroy_image_view(self.depth_image_view, None);
             self.device.destroy_image(self.depth_image, None);
 
-            for &image_view in self.present_image_views.iter() {
+            for &image_view in self.swapchain.present_image_views.iter() {
                 self.device.destroy_image_view(image_view, None);
             }
 
             self.device.destroy_command_pool(self.pool, None);
 
             self.swapchain_loader
-                .destroy_swapchain(self.swapchain, None);
+                .destroy_swapchain(self.swapchain.swapchain, None);
         }
     }
 }
 
-impl Drop for ExampleBase {
+impl Drop for Engine {
     fn drop(&mut self) {
         unsafe {
             self.device.device_wait_idle().unwrap();

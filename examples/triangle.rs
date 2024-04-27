@@ -1,8 +1,8 @@
-use nhope::ExampleBase;
+use nhope::Engine;
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut base = ExampleBase::new(1920, 1080)?;
+    let mut base = Engine::new(1920, 1080)?;
     base.looping();
     Ok(())
 }
