@@ -538,18 +538,20 @@ impl Engine {
 
             Ok(Self {
                 event_loop: RefCell::new(event_loop),
-                entry,
-                instance,
-                device,
-                queue_family_index,
-                pdevices,
-                pdevice,
-                device_memory_properties,
                 window,
+                entry,
+
+                instance,
+                pdevices,
+                surface_loader,
+
                 debug_utils_loader,
                 debug_call_back,
 
-                surface_loader,
+                device_memory_properties,
+                queue_family_index,
+                pdevice,
+
                 surface: EngineSurface {
                     surface,
                     capabilities: surface_capabilities,
@@ -576,6 +578,8 @@ impl Engine {
                         depth_image_memory,
                     },
                 },
+
+                device,
             })
         }
     }
