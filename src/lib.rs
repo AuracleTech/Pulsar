@@ -146,18 +146,24 @@ pub fn find_memorytype_index(
 
 #[derive(Default)]
 struct EngineSurface {
-    loader: Option<surface::Instance>,
     surface: vk::SurfaceKHR,
     format: vk::SurfaceFormatKHR,
     capabilities: vk::SurfaceCapabilitiesKHR,
     resolution: vk::Extent2D,
 }
 
+#[derive(Default)]
+struct EngineSwapchain {
+    swapchain: vk::SwapchainKHR,
+    present_queue: vk::Queue,
+    present_images: Vec<vk::Image>,
+    present_image_views: Vec<vk::ImageView>,
+}
+
 pub struct ExampleBase {
     pub entry: Entry,
     pub instance: Instance,
     pub device: Device,
-    pub swapchain_loader: swapchain::Device,
     pub debug_utils_loader: debug_utils::Instance,
     pub window: winit::window::Window,
     pub event_loop: RefCell<EventLoop<()>>,
@@ -166,13 +172,12 @@ pub struct ExampleBase {
     pub pdevice: vk::PhysicalDevice,
     pub device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     pub queue_family_index: u32,
-    pub present_queue: vk::Queue,
 
+    surface_loader: surface::Instance,
     surface: EngineSurface,
 
-    pub swapchain: vk::SwapchainKHR,
-    pub present_images: Vec<vk::Image>,
-    pub present_image_views: Vec<vk::ImageView>,
+    swapchain_loader: swapchain::Device,
+    swapchain: EngineSwapchain,
 
     pub pool: vk::CommandPool,
     pub draw_command_buffer: vk::CommandBuffer,
@@ -261,6 +266,7 @@ impl ExampleBase {
                 .unwrap();
 
             let framebuffers: Vec<vk::Framebuffer> = self
+                .swapchain
                 .present_image_views
                 .iter()
                 .map(|&present_image_view| {
@@ -532,7 +538,7 @@ impl ExampleBase {
                 let (present_index, _) = self
                     .swapchain_loader
                     .acquire_next_image(
-                        self.swapchain,
+                        self.swapchain.swapchain,
                         u64::MAX,
                         self.present_complete_semaphore,
                         vk::Fence::null(),
@@ -562,7 +568,7 @@ impl ExampleBase {
                     &self.device,
                     self.draw_command_buffer,
                     self.draw_commands_reuse_fence,
-                    self.present_queue,
+                    self.swapchain.present_queue,
                     &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
                     &[self.present_complete_semaphore],
                     &[self.rendering_complete_semaphore],
@@ -605,7 +611,7 @@ impl ExampleBase {
                     },
                 );
                 let wait_semaphors = [self.rendering_complete_semaphore];
-                let swapchains = [self.swapchain];
+                let swapchains = [self.swapchain.swapchain];
                 let image_indices = [present_index];
                 let present_info = vk::PresentInfoKHR::default()
                     .wait_semaphores(&wait_semaphors) // &self.rendering_complete_semaphore)
@@ -614,7 +620,7 @@ impl ExampleBase {
 
                 let queue_present_result = self
                     .swapchain_loader
-                    .queue_present(self.present_queue, &present_info);
+                    .queue_present(self.swapchain.present_queue, &present_info);
 
                 match queue_present_result {
                     Ok(_) => {}
@@ -1023,19 +1029,21 @@ impl ExampleBase {
                 device_memory_properties,
                 window,
 
+                surface_loader,
                 surface: EngineSurface {
-                    loader: Some(surface_loader),
                     surface,
                     capabilities: surface_capabilities,
                     format: surface_format,
                     resolution: surface_resolution,
                 },
 
-                present_queue,
                 swapchain_loader,
-                swapchain,
-                present_images,
-                present_image_views,
+                swapchain: EngineSwapchain {
+                    swapchain,
+                    present_queue,
+                    present_images,
+                    present_image_views,
+                },
                 pool,
                 draw_command_buffer,
                 setup_command_buffer,
@@ -1087,9 +1095,8 @@ impl ExampleBase {
         unsafe {
             self.destroy_swapchain();
 
-            if let Some(surface_loader) = self.surface.loader.take() {
-                surface_loader.destroy_surface(self.surface.surface, None);
-            }
+            self.surface_loader
+                .destroy_surface(self.surface.surface, None);
         }
     }
 
