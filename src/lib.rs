@@ -7,6 +7,7 @@
     unused_qualifications
 )]
 
+mod camera;
 mod model;
 
 use std::{
@@ -1130,6 +1131,7 @@ impl Engine {
                 .destroy_semaphore(self.swapchain.resources.present_complete_semaphore, None);
             self.device
                 .destroy_semaphore(self.swapchain.resources.rendering_complete_semaphore, None);
+
             self.device
                 .destroy_fence(self.swapchain.resources.draw_commands_reuse_fence, None);
             self.device
