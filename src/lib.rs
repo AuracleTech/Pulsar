@@ -279,7 +279,6 @@ impl Engine {
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
 
-            // SECTION SURFACE
             let surface = ash_window::create_surface(
                 &entry,
                 &instance,
@@ -316,8 +315,13 @@ impl Engine {
                 .expect("Couldn't find suitable device.");
             let queue_family_index = queue_family_index as u32;
 
-            let (surface_format, surface_capabilities) =
-                Engine::create_surface(&surface_loader, pdevice, surface);
+            let surface_format = surface_loader
+                .get_physical_device_surface_formats(pdevice, surface)
+                .unwrap()[0];
+
+            let surface_capabilities = surface_loader
+                .get_physical_device_surface_capabilities(pdevice, surface)
+                .unwrap();
 
             let priorities = [1.0];
             let queue_info = vk::DeviceQueueCreateInfo::default()
@@ -1078,35 +1082,6 @@ impl Engine {
             }
         })
     }
-
-    // NOTE always wait device idle before destroying anyting
-    fn recreate_swapchain(&mut self) {
-        self.destroy_swapchain();
-        // FIX let (_, _) = ExampleBase::create_surface();
-        self.create_swapchain();
-    }
-
-    fn create_surface(
-        surface_loader: &surface::Instance,
-        pdevice: vk::PhysicalDevice,
-        surface: vk::SurfaceKHR,
-    ) -> (vk::SurfaceFormatKHR, vk::SurfaceCapabilitiesKHR) {
-        unsafe {
-            let surface_format = surface_loader
-                .get_physical_device_surface_formats(pdevice, surface)
-                .unwrap()[0];
-
-            let surface_capabilities = surface_loader
-                .get_physical_device_surface_capabilities(pdevice, surface)
-                .unwrap();
-
-            // NOTE recreate swapchain in surface becaue the old swapchain is invalid after surface recreation
-
-            (surface_format, surface_capabilities)
-        }
-    }
-
-    fn create_swapchain(&mut self) {}
 
     // NOTE always wait device idle before destroying anyting
     fn destroy_instance(&mut self) {
