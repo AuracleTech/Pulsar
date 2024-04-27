@@ -7,7 +7,7 @@
     unused_qualifications
 )]
 
-pub mod model;
+mod model;
 
 use std::{
     borrow::Cow, cell::RefCell, default::Default, error::Error, ffi, mem, ops::Drop,
@@ -50,7 +50,7 @@ macro_rules! offset_of {
 /// is executed. That way we can delay the waiting for the fences by 1 frame which is good for performance.
 /// Make sure to create the fence in a signaled state on the first use.
 #[allow(clippy::too_many_arguments)]
-pub fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
+fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
     device: &Device,
     command_buffer: vk::CommandBuffer,
     command_buffer_reuse_fence: vk::Fence,
@@ -129,7 +129,7 @@ unsafe extern "system" fn vulkan_debug_callback(
     vk::FALSE
 }
 
-pub fn find_memorytype_index(
+fn find_memorytype_index(
     memory_req: &vk::MemoryRequirements,
     memory_prop: &vk::PhysicalDeviceMemoryProperties,
     flags: vk::MemoryPropertyFlags,
@@ -158,40 +158,44 @@ struct EngineSwapchain {
     present_queue: vk::Queue,
     present_images: Vec<vk::Image>,
     present_image_views: Vec<vk::ImageView>,
+    resources: SwapchainResources,
+}
+
+#[derive(Default)]
+struct SwapchainResources {
+    pool: vk::CommandPool,
+    draw_command_buffer: vk::CommandBuffer,
+    setup_command_buffer: vk::CommandBuffer,
+
+    depth_image: vk::Image,
+    depth_image_view: vk::ImageView,
+    depth_image_memory: vk::DeviceMemory,
+
+    draw_commands_reuse_fence: vk::Fence,
+    setup_commands_reuse_fence: vk::Fence,
+
+    present_complete_semaphore: vk::Semaphore,
+    rendering_complete_semaphore: vk::Semaphore,
 }
 
 pub struct Engine {
-    pub entry: Entry,
-    pub instance: Instance,
-    pub device: Device,
-    pub debug_utils_loader: debug_utils::Instance,
-    pub window: winit::window::Window,
-    pub event_loop: RefCell<EventLoop<()>>,
-    pub debug_call_back: vk::DebugUtilsMessengerEXT,
+    entry: Entry,
+    instance: Instance,
+    device: Device,
+    event_loop: RefCell<EventLoop<()>>,
+    window: winit::window::Window,
+    debug_utils_loader: debug_utils::Instance,
+    debug_call_back: vk::DebugUtilsMessengerEXT,
 
-    pub pdevice: vk::PhysicalDevice,
-    pub device_memory_properties: vk::PhysicalDeviceMemoryProperties,
-    pub queue_family_index: u32,
+    pdevice: vk::PhysicalDevice,
+    device_memory_properties: vk::PhysicalDeviceMemoryProperties,
+    queue_family_index: u32,
 
     surface_loader: surface::Instance,
     surface: EngineSurface,
 
     swapchain_loader: swapchain::Device,
     swapchain: EngineSwapchain,
-
-    pub pool: vk::CommandPool,
-    pub draw_command_buffer: vk::CommandBuffer,
-    pub setup_command_buffer: vk::CommandBuffer,
-
-    pub depth_image: vk::Image,
-    pub depth_image_view: vk::ImageView,
-    pub depth_image_memory: vk::DeviceMemory,
-
-    pub present_complete_semaphore: vk::Semaphore,
-    pub rendering_complete_semaphore: vk::Semaphore,
-
-    pub draw_commands_reuse_fence: vk::Fence,
-    pub setup_commands_reuse_fence: vk::Fence,
 }
 
 impl Engine {
@@ -270,7 +274,10 @@ impl Engine {
                 .present_image_views
                 .iter()
                 .map(|&present_image_view| {
-                    let framebuffer_attachments = [present_image_view, self.depth_image_view];
+                    let framebuffer_attachments = [
+                        present_image_view,
+                        self.swapchain.resources.depth_image_view,
+                    ];
                     let frame_buffer_create_info = vk::FramebufferCreateInfo::default()
                         .render_pass(renderpass)
                         .attachments(&framebuffer_attachments)
@@ -540,7 +547,7 @@ impl Engine {
                     .acquire_next_image(
                         self.swapchain.swapchain,
                         u64::MAX,
-                        self.present_complete_semaphore,
+                        self.swapchain.resources.present_complete_semaphore,
                         vk::Fence::null(),
                     )
                     .unwrap();
@@ -566,12 +573,12 @@ impl Engine {
 
                 record_submit_commandbuffer(
                     &self.device,
-                    self.draw_command_buffer,
-                    self.draw_commands_reuse_fence,
+                    self.swapchain.resources.draw_command_buffer,
+                    self.swapchain.resources.draw_commands_reuse_fence,
                     self.swapchain.present_queue,
                     &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
-                    &[self.present_complete_semaphore],
-                    &[self.rendering_complete_semaphore],
+                    &[self.swapchain.resources.present_complete_semaphore],
+                    &[self.swapchain.resources.rendering_complete_semaphore],
                     |device, draw_command_buffer| {
                         device.cmd_begin_render_pass(
                             draw_command_buffer,
@@ -610,7 +617,7 @@ impl Engine {
                         device.cmd_end_render_pass(draw_command_buffer);
                     },
                 );
-                let wait_semaphors = [self.rendering_complete_semaphore];
+                let wait_semaphors = [self.swapchain.resources.rendering_complete_semaphore];
                 let swapchains = [self.swapchain.swapchain];
                 let image_indices = [present_index];
                 let present_info = vk::PresentInfoKHR::default()
@@ -625,7 +632,9 @@ impl Engine {
                 match queue_present_result {
                     Ok(_) => {}
                     Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                        panic!("Swapchain out of date");
+                        // self.device.device_wait_idle().unwrap();
+                        // self.recreate_swapchain();
+                        // IMPLEMENT
                     }
                     Err(err) => panic!("Failed to present queue: {:?}", err),
                 }
@@ -653,7 +662,7 @@ impl Engine {
         self.render_loop(|| {}).unwrap();
     }
 
-    pub fn render_loop<F: Fn()>(&self, f: F) -> Result<(), impl Error> {
+    fn render_loop<F: Fn()>(&self, f: F) -> Result<(), impl Error> {
         self.event_loop.borrow_mut().run_on_demand(|event, elwp| {
             elwp.set_control_flow(ControlFlow::Poll);
             match event {
@@ -674,6 +683,7 @@ impl Engine {
                         elwp.exit();
                     }
                     WindowEvent::Resized(new_size) => {
+                        // IMPLEMENT
                         // Recreate surface
                     }
                     _ => (),
@@ -1028,6 +1038,8 @@ impl Engine {
                 pdevice,
                 device_memory_properties,
                 window,
+                debug_utils_loader,
+                debug_call_back,
 
                 surface_loader,
                 surface: EngineSurface {
@@ -1043,24 +1055,31 @@ impl Engine {
                     present_queue,
                     present_images,
                     present_image_views,
+                    resources: SwapchainResources {
+                        pool,
+                        draw_command_buffer,
+                        setup_command_buffer,
+                        depth_image,
+                        depth_image_view,
+                        present_complete_semaphore,
+                        rendering_complete_semaphore,
+                        draw_commands_reuse_fence,
+                        setup_commands_reuse_fence,
+                        depth_image_memory,
+                    },
                 },
-                pool,
-                draw_command_buffer,
-                setup_command_buffer,
-                depth_image,
-                depth_image_view,
-                present_complete_semaphore,
-                rendering_complete_semaphore,
-                draw_commands_reuse_fence,
-                setup_commands_reuse_fence,
-                debug_call_back,
-                debug_utils_loader,
-                depth_image_memory,
             })
         }
     }
 
-    pub fn create_surface(
+    // NOTE always wait device idle before destroying anyting
+    fn recreate_swapchain(&mut self) {
+        self.destroy_swapchain();
+        // FIX let (_, _) = ExampleBase::create_surface();
+        self.create_swapchain();
+    }
+
+    fn create_surface(
         surface_loader: &surface::Instance,
         pdevice: vk::PhysicalDevice,
         surface: vk::SurfaceKHR,
@@ -1074,12 +1093,16 @@ impl Engine {
                 .get_physical_device_surface_capabilities(pdevice, surface)
                 .unwrap();
 
+            // NOTE recreate swapchain in surface becaue the old swapchain is invalid after surface recreation
+
             (surface_format, surface_capabilities)
         }
     }
 
+    fn create_swapchain(&mut self) {}
+
     // NOTE always wait device idle before destroying anyting
-    pub fn destroy_instance(&mut self) {
+    fn destroy_instance(&mut self) {
         unsafe {
             self.destroy_surface();
 
@@ -1091,7 +1114,7 @@ impl Engine {
     }
 
     // NOTE always wait device idle before destroying anyting
-    pub fn destroy_surface(&mut self) {
+    fn destroy_surface(&mut self) {
         unsafe {
             self.destroy_swapchain();
 
@@ -1101,26 +1124,30 @@ impl Engine {
     }
 
     // NOTE always wait device idle before destroying anyting
-    pub fn destroy_swapchain(&mut self) {
+    fn destroy_swapchain(&mut self) {
         unsafe {
             self.device
-                .destroy_semaphore(self.present_complete_semaphore, None);
+                .destroy_semaphore(self.swapchain.resources.present_complete_semaphore, None);
             self.device
-                .destroy_semaphore(self.rendering_complete_semaphore, None);
+                .destroy_semaphore(self.swapchain.resources.rendering_complete_semaphore, None);
             self.device
-                .destroy_fence(self.draw_commands_reuse_fence, None);
+                .destroy_fence(self.swapchain.resources.draw_commands_reuse_fence, None);
             self.device
-                .destroy_fence(self.setup_commands_reuse_fence, None);
+                .destroy_fence(self.swapchain.resources.setup_commands_reuse_fence, None);
 
-            self.device.free_memory(self.depth_image_memory, None);
-            self.device.destroy_image_view(self.depth_image_view, None);
-            self.device.destroy_image(self.depth_image, None);
+            self.device
+                .free_memory(self.swapchain.resources.depth_image_memory, None);
+            self.device
+                .destroy_image_view(self.swapchain.resources.depth_image_view, None);
+            self.device
+                .destroy_image(self.swapchain.resources.depth_image, None);
 
             for &image_view in self.swapchain.present_image_views.iter() {
                 self.device.destroy_image_view(image_view, None);
             }
 
-            self.device.destroy_command_pool(self.pool, None);
+            self.device
+                .destroy_command_pool(self.swapchain.resources.pool, None);
 
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain.swapchain, None);
