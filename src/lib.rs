@@ -144,8 +144,9 @@ pub fn find_memorytype_index(
         .map(|(index, _memory_type)| index as _)
 }
 
+#[derive(Default)]
 struct EngineSurface {
-    loader: surface::Instance,
+    loader: Option<surface::Instance>,
     surface: vk::SurfaceKHR,
     format: vk::SurfaceFormatKHR,
     capabilities: vk::SurfaceCapabilitiesKHR,
@@ -1023,7 +1024,7 @@ impl ExampleBase {
                 window,
 
                 surface: EngineSurface {
-                    loader: surface_loader,
+                    loader: Some(surface_loader),
                     surface,
                     capabilities: surface_capabilities,
                     format: surface_format,
@@ -1086,9 +1087,9 @@ impl ExampleBase {
         unsafe {
             self.destroy_swapchain();
 
-            self.surface
-                .loader
-                .destroy_surface(self.surface.surface, None);
+            if let Some(surface_loader) = self.surface.loader.take() {
+                surface_loader.destroy_surface(self.surface.surface, None);
+            }
         }
     }
 
