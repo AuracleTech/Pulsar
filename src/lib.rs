@@ -8,7 +8,10 @@ use ash::{
     vk, Device, Entry, Instance,
 };
 use model::{Mesh, Vertex};
-use std::{borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char};
+use std::{
+    borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
+    thread::JoinHandle,
+};
 use winit::{
     event_loop::EventLoop,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
@@ -1027,6 +1030,17 @@ impl Engine {
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
         }
+    }
+
+    // create
+    pub fn start_input_thread(&self) -> JoinHandle<()> {
+        std::thread::spawn(move || {
+            let mut count = 0;
+            loop {
+                count += 1;
+                println!("Input thread count: {}", count);
+            }
+        })
     }
 }
 

@@ -4,7 +4,7 @@
 		{
 			"type": "cargo",
 			"command": "run",
-			"args": ["--example", "triangle"],
+			"args": ["--example", "example"],
 			"problemMatcher": ["$rustc"],
 			"label": "rust: cargo run",
 			"group": {
