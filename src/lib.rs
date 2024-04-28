@@ -1,19 +1,5 @@
-#![warn(
-    clippy::use_self,
-    deprecated_in_future,
-    rust_2018_idioms,
-    trivial_casts,
-    trivial_numeric_casts,
-    unused_qualifications
-)]
-
 mod camera;
 mod model;
-
-use std::{
-    borrow::Cow, cell::RefCell, default::Default, error::Error, ffi, mem, ops::Drop,
-    os::raw::c_char,
-};
 
 use ash::{
     ext::debug_utils,
@@ -22,11 +8,9 @@ use ash::{
     vk, Device, Entry, Instance,
 };
 use model::{Mesh, Vertex};
+use std::{borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char};
 use winit::{
-    event::{ElementState, Event, KeyEvent, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    keyboard::{Key, NamedKey},
-    platform::run_on_demand::EventLoopExtRunOnDemand,
+    event_loop::EventLoop,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::WindowBuilder,
 };
@@ -180,7 +164,6 @@ struct SwapchainResources {
 }
 
 pub struct Engine {
-    event_loop: RefCell<EventLoop<()>>,
     window: winit::window::Window,
     entry: Entry,
 
@@ -201,10 +184,28 @@ pub struct Engine {
     swapchain: EngineSwapchain,
 
     device: Device,
+
+    renderpass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
+    graphic_pipeline: vk::Pipeline,
+    vertex_input_buffer: vk::Buffer,
+    index_buffer: vk::Buffer,
+    index_buffer_data: Vec<u32>,
+    viewports: [vk::Viewport; 1],
+    scissors: [vk::Rect2D; 1],
+    vertex_input_buffer_memory: vk::DeviceMemory,
+    graphics_pipelines: Vec<vk::Pipeline>,
+    pipeline_layout: vk::PipelineLayout,
+    vertex_shader_module: vk::ShaderModule,
+    fragment_shader_module: vk::ShaderModule,
+    index_buffer_memory: vk::DeviceMemory,
 }
 
 impl Engine {
-    pub fn new(window_width: u32, window_height: u32) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        window_width: u32,
+        window_height: u32,
+    ) -> Result<(Self, EventLoop<()>), Box<dyn Error>> {
         unsafe {
             let event_loop = EventLoop::new()?;
             let window = WindowBuilder::new()
@@ -540,77 +541,29 @@ impl Engine {
                 .create_semaphore(&semaphore_create_info, None)
                 .unwrap();
 
-            Ok(Self {
-                event_loop: RefCell::new(event_loop),
-                window,
-                entry,
+            // SECTION PIPELINES
 
-                instance,
-                pdevices,
-                surface_loader,
-
-                debug_utils_loader,
-                debug_call_back,
-
-                device_memory_properties,
-                queue_family_index,
-                pdevice,
-
-                surface: EngineSurface {
-                    surface,
-                    capabilities: surface_capabilities,
-                    format: surface_format,
-                    resolution: surface_resolution,
-                },
-
-                swapchain_loader,
-                swapchain: EngineSwapchain {
-                    swapchain,
-                    present_queue,
-                    present_images,
-                    present_image_views,
-                    resources: SwapchainResources {
-                        pool,
-                        draw_command_buffer,
-                        setup_command_buffer,
-                        depth_image,
-                        depth_image_view,
-                        present_complete_semaphore,
-                        rendering_complete_semaphore,
-                        draw_commands_reuse_fence,
-                        setup_commands_reuse_fence,
-                        depth_image_memory,
+            let triangle = Mesh {
+                vertices: vec![
+                    Vertex {
+                        pos: [-1.0, 1.0, 0.0, 1.0],
+                        color: [0.0, 1.0, 0.0, 1.0],
                     },
-                },
+                    Vertex {
+                        pos: [1.0, 1.0, 0.0, 1.0],
+                        color: [0.0, 0.0, 1.0, 1.0],
+                    },
+                    Vertex {
+                        pos: [0.0, -1.0, 0.0, 1.0],
+                        color: [1.0, 0.0, 0.0, 1.0],
+                    },
+                ],
+                indices: vec![0, 1, 2],
+            };
 
-                device,
-            })
-        }
-    }
-
-    pub fn looping(&mut self) {
-        let triangle = Mesh {
-            vertices: vec![
-                Vertex {
-                    pos: [-1.0, 1.0, 0.0, 1.0],
-                    color: [0.0, 1.0, 0.0, 1.0],
-                },
-                Vertex {
-                    pos: [1.0, 1.0, 0.0, 1.0],
-                    color: [0.0, 0.0, 1.0, 1.0],
-                },
-                Vertex {
-                    pos: [0.0, -1.0, 0.0, 1.0],
-                    color: [1.0, 0.0, 0.0, 1.0],
-                },
-            ],
-            indices: vec![0, 1, 2],
-        };
-
-        unsafe {
             let renderpass_attachments = [
                 vk::AttachmentDescription {
-                    format: self.surface.format.format,
+                    format: surface_format.format,
                     samples: vk::SampleCountFlags::TYPE_1,
                     load_op: vk::AttachmentLoadOp::CLEAR,
                     store_op: vk::AttachmentStoreOp::STORE,
@@ -653,28 +606,22 @@ impl Engine {
                 .subpasses(std::slice::from_ref(&subpass))
                 .dependencies(&dependencies);
 
-            let renderpass = self
-                .device
+            let renderpass = device
                 .create_render_pass(&renderpass_create_info, None)
                 .unwrap();
 
-            let framebuffers: Vec<vk::Framebuffer> = self
-                .swapchain
-                .present_image_views
+            let framebuffers: Vec<vk::Framebuffer> = present_image_views
                 .iter()
                 .map(|&present_image_view| {
-                    let framebuffer_attachments = [
-                        present_image_view,
-                        self.swapchain.resources.depth_image_view,
-                    ];
+                    let framebuffer_attachments = [present_image_view, depth_image_view];
                     let frame_buffer_create_info = vk::FramebufferCreateInfo::default()
                         .render_pass(renderpass)
                         .attachments(&framebuffer_attachments)
-                        .width(self.surface.resolution.width)
-                        .height(self.surface.resolution.height)
+                        .width(surface_resolution.width)
+                        .height(surface_resolution.height)
                         .layers(1);
 
-                    self.device
+                    device
                         .create_framebuffer(&frame_buffer_create_info, None)
                         .unwrap()
                 })
@@ -686,11 +633,11 @@ impl Engine {
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER)
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-            let index_buffer = self.device.create_buffer(&index_buffer_info, None).unwrap();
-            let index_buffer_memory_req = self.device.get_buffer_memory_requirements(index_buffer);
+            let index_buffer = device.create_buffer(&index_buffer_info, None).unwrap();
+            let index_buffer_memory_req = device.get_buffer_memory_requirements(index_buffer);
             let index_buffer_memory_index = find_memorytype_index(
                 &index_buffer_memory_req,
-                &self.device_memory_properties,
+                &device_memory_properties,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )
             .expect("Unable to find suitable memorytype for the index buffer.");
@@ -700,12 +647,8 @@ impl Engine {
                 memory_type_index: index_buffer_memory_index,
                 ..Default::default()
             };
-            let index_buffer_memory = self
-                .device
-                .allocate_memory(&index_allocate_info, None)
-                .unwrap();
-            let index_ptr = self
-                .device
+            let index_buffer_memory = device.allocate_memory(&index_allocate_info, None).unwrap();
+            let index_ptr = device
                 .map_memory(
                     index_buffer_memory,
                     0,
@@ -719,8 +662,8 @@ impl Engine {
                 index_buffer_memory_req.size,
             );
             index_slice.copy_from_slice(&index_buffer_data);
-            self.device.unmap_memory(index_buffer_memory);
-            self.device
+            device.unmap_memory(index_buffer_memory);
+            device
                 .bind_buffer_memory(index_buffer, index_buffer_memory, 0)
                 .unwrap();
 
@@ -731,18 +674,16 @@ impl Engine {
                 ..Default::default()
             };
 
-            let vertex_input_buffer = self
-                .device
+            let vertex_input_buffer = device
                 .create_buffer(&vertex_input_buffer_info, None)
                 .unwrap();
 
-            let vertex_input_buffer_memory_req = self
-                .device
-                .get_buffer_memory_requirements(vertex_input_buffer);
+            let vertex_input_buffer_memory_req =
+                device.get_buffer_memory_requirements(vertex_input_buffer);
 
             let vertex_input_buffer_memory_index = find_memorytype_index(
                 &vertex_input_buffer_memory_req,
-                &self.device_memory_properties,
+                &device_memory_properties,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )
             .expect("Unable to find suitable memorytype for the vertex buffer.");
@@ -753,13 +694,11 @@ impl Engine {
                 ..Default::default()
             };
 
-            let vertex_input_buffer_memory = self
-                .device
+            let vertex_input_buffer_memory = device
                 .allocate_memory(&vertex_buffer_allocate_info, None)
                 .unwrap();
 
-            let vert_ptr = self
-                .device
+            let vert_ptr = device
                 .map_memory(
                     vertex_input_buffer_memory,
                     0,
@@ -774,8 +713,8 @@ impl Engine {
                 vertex_input_buffer_memory_req.size,
             );
             vert_align.copy_from_slice(&triangle.vertices);
-            self.device.unmap_memory(vertex_input_buffer_memory);
-            self.device
+            device.unmap_memory(vertex_input_buffer_memory);
+            device
                 .bind_buffer_memory(vertex_input_buffer, vertex_input_buffer_memory, 0)
                 .unwrap();
             let mut vertex_spv_file = Cursor::new(&include_bytes!("../shaders/vert.spv")[..]);
@@ -789,20 +728,17 @@ impl Engine {
                 read_spv(&mut frag_spv_file).expect("Failed to read fragment shader spv file");
             let frag_shader_info = vk::ShaderModuleCreateInfo::default().code(&frag_code);
 
-            let vertex_shader_module = self
-                .device
+            let vertex_shader_module = device
                 .create_shader_module(&vertex_shader_info, None)
                 .expect("Vertex shader module error");
 
-            let fragment_shader_module = self
-                .device
+            let fragment_shader_module = device
                 .create_shader_module(&frag_shader_info, None)
                 .expect("Fragment shader module error");
 
             let layout_create_info = vk::PipelineLayoutCreateInfo::default();
 
-            let pipeline_layout = self
-                .device
+            let pipeline_layout = device
                 .create_pipeline_layout(&layout_create_info, None)
                 .unwrap();
 
@@ -852,12 +788,12 @@ impl Engine {
             let viewports = [vk::Viewport {
                 x: 0.0,
                 y: 0.0,
-                width: self.surface.resolution.width as f32,
-                height: self.surface.resolution.height as f32,
+                width: surface_resolution.width as f32,
+                height: surface_resolution.height as f32,
                 min_depth: 0.0,
                 max_depth: 1.0,
             }];
-            let scissors = [self.surface.resolution.into()];
+            let scissors = [surface_resolution.into()];
             let viewport_state_info = vk::PipelineViewportStateCreateInfo::default()
                 .scissors(&scissors)
                 .viewports(&viewports);
@@ -919,8 +855,7 @@ impl Engine {
                 .layout(pipeline_layout)
                 .render_pass(renderpass);
 
-            let graphics_pipelines = self
-                .device
+            let graphics_pipelines = device
                 .create_graphics_pipelines(
                     vk::PipelineCache::null(),
                     &[graphic_pipeline_info],
@@ -930,182 +865,197 @@ impl Engine {
 
             let graphic_pipeline = graphics_pipelines[0];
 
-            let _ = self.render_loop(|| {
-                let (present_index, _) = self
-                    .swapchain_loader
-                    .acquire_next_image(
-                        self.swapchain.swapchain,
-                        u64::MAX,
-                        self.swapchain.resources.present_complete_semaphore,
-                        vk::Fence::null(),
-                    )
-                    .unwrap();
-                let clear_values = [
-                    vk::ClearValue {
-                        color: vk::ClearColorValue {
-                            float32: [0.0, 0.0, 0.0, 0.0],
+            Ok((
+                Self {
+                    window,
+                    entry,
+
+                    instance,
+                    pdevices,
+                    surface_loader,
+
+                    debug_utils_loader,
+                    debug_call_back,
+
+                    device_memory_properties,
+                    queue_family_index,
+                    pdevice,
+
+                    surface: EngineSurface {
+                        surface,
+                        capabilities: surface_capabilities,
+                        format: surface_format,
+                        resolution: surface_resolution,
+                    },
+
+                    swapchain_loader,
+                    swapchain: EngineSwapchain {
+                        swapchain,
+                        present_queue,
+                        present_images,
+                        present_image_views,
+                        resources: SwapchainResources {
+                            pool,
+                            draw_command_buffer,
+                            setup_command_buffer,
+                            depth_image,
+                            depth_image_view,
+                            present_complete_semaphore,
+                            rendering_complete_semaphore,
+                            draw_commands_reuse_fence,
+                            setup_commands_reuse_fence,
+                            depth_image_memory,
                         },
                     },
-                    vk::ClearValue {
-                        depth_stencil: vk::ClearDepthStencilValue {
-                            depth: 1.0,
-                            stencil: 0,
-                        },
+
+                    device,
+
+                    renderpass,
+                    framebuffers,
+                    graphic_pipeline,
+                    vertex_input_buffer,
+                    index_buffer,
+                    index_buffer_data: index_buffer_data.to_vec(),
+                    viewports,
+                    scissors,
+                    vertex_input_buffer_memory,
+                    graphics_pipelines,
+                    pipeline_layout,
+                    vertex_shader_module,
+                    fragment_shader_module,
+                    index_buffer_memory,
+                },
+                event_loop,
+            ))
+        }
+    }
+
+    pub fn render(&self) {
+        unsafe {
+            let (present_index, _) = self
+                .swapchain_loader
+                .acquire_next_image(
+                    self.swapchain.swapchain,
+                    u64::MAX,
+                    self.swapchain.resources.present_complete_semaphore,
+                    vk::Fence::null(),
+                )
+                .unwrap();
+            let clear_values = [
+                vk::ClearValue {
+                    color: vk::ClearColorValue {
+                        float32: [0.0, 0.0, 0.0, 0.0],
                     },
-                ];
-
-                let render_pass_begin_info = vk::RenderPassBeginInfo::default()
-                    .render_pass(renderpass)
-                    .framebuffer(framebuffers[present_index as usize])
-                    .render_area(self.surface.resolution.into())
-                    .clear_values(&clear_values);
-
-                record_submit_commandbuffer(
-                    &self.device,
-                    self.swapchain.resources.draw_command_buffer,
-                    self.swapchain.resources.draw_commands_reuse_fence,
-                    self.swapchain.present_queue,
-                    &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
-                    &[self.swapchain.resources.present_complete_semaphore],
-                    &[self.swapchain.resources.rendering_complete_semaphore],
-                    |device, draw_command_buffer| {
-                        device.cmd_begin_render_pass(
-                            draw_command_buffer,
-                            &render_pass_begin_info,
-                            vk::SubpassContents::INLINE,
-                        );
-                        device.cmd_bind_pipeline(
-                            draw_command_buffer,
-                            vk::PipelineBindPoint::GRAPHICS,
-                            graphic_pipeline,
-                        );
-                        device.cmd_set_viewport(draw_command_buffer, 0, &viewports);
-                        device.cmd_set_scissor(draw_command_buffer, 0, &scissors);
-                        device.cmd_bind_vertex_buffers(
-                            draw_command_buffer,
-                            0,
-                            &[vertex_input_buffer],
-                            &[0],
-                        );
-                        device.cmd_bind_index_buffer(
-                            draw_command_buffer,
-                            index_buffer,
-                            0,
-                            vk::IndexType::UINT32,
-                        );
-                        device.cmd_draw_indexed(
-                            draw_command_buffer,
-                            index_buffer_data.len() as u32,
-                            1,
-                            0,
-                            0,
-                            1,
-                        );
-                        // Or draw without the index buffer
-                        // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
-                        device.cmd_end_render_pass(draw_command_buffer);
+                },
+                vk::ClearValue {
+                    depth_stencil: vk::ClearDepthStencilValue {
+                        depth: 1.0,
+                        stencil: 0,
                     },
-                );
-                let wait_semaphors = [self.swapchain.resources.rendering_complete_semaphore];
-                let swapchains = [self.swapchain.swapchain];
-                let image_indices = [present_index];
-                let present_info = vk::PresentInfoKHR::default()
-                    .wait_semaphores(&wait_semaphors) // &self.rendering_complete_semaphore)
-                    .swapchains(&swapchains)
-                    .image_indices(&image_indices);
+                },
+            ];
 
-                let queue_present_result = self
-                    .swapchain_loader
-                    .queue_present(self.swapchain.present_queue, &present_info);
+            let render_pass_begin_info = vk::RenderPassBeginInfo::default()
+                .render_pass(self.renderpass)
+                .framebuffer(self.framebuffers[present_index as usize])
+                .render_area(self.surface.resolution.into())
+                .clear_values(&clear_values);
 
-                match queue_present_result {
-                    Ok(_) => {}
-                    Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                        eprintln!("ERROR_OUT_OF_DATE_KHR caught");
-                    }
-                    Err(err) => panic!("Failed to present queue: {:?}", err),
+            record_submit_commandbuffer(
+                &self.device,
+                self.swapchain.resources.draw_command_buffer,
+                self.swapchain.resources.draw_commands_reuse_fence,
+                self.swapchain.present_queue,
+                &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
+                &[self.swapchain.resources.present_complete_semaphore],
+                &[self.swapchain.resources.rendering_complete_semaphore],
+                |device, draw_command_buffer| {
+                    device.cmd_begin_render_pass(
+                        draw_command_buffer,
+                        &render_pass_begin_info,
+                        vk::SubpassContents::INLINE,
+                    );
+                    device.cmd_bind_pipeline(
+                        draw_command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.graphic_pipeline,
+                    );
+                    device.cmd_set_viewport(draw_command_buffer, 0, &self.viewports);
+                    device.cmd_set_scissor(draw_command_buffer, 0, &self.scissors);
+                    device.cmd_bind_vertex_buffers(
+                        draw_command_buffer,
+                        0,
+                        &[self.vertex_input_buffer],
+                        &[0],
+                    );
+                    device.cmd_bind_index_buffer(
+                        draw_command_buffer,
+                        self.index_buffer,
+                        0,
+                        vk::IndexType::UINT32,
+                    );
+                    device.cmd_draw_indexed(
+                        draw_command_buffer,
+                        self.index_buffer_data.len() as u32,
+                        1,
+                        0,
+                        0,
+                        1,
+                    );
+                    // Or draw without the index buffer
+                    // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
+                    device.cmd_end_render_pass(draw_command_buffer);
+                },
+            );
+            let wait_semaphors = [self.swapchain.resources.rendering_complete_semaphore];
+            let swapchains = [self.swapchain.swapchain];
+            let image_indices = [present_index];
+            let present_info = vk::PresentInfoKHR::default()
+                .wait_semaphores(&wait_semaphors) // &self.rendering_complete_semaphore)
+                .swapchains(&swapchains)
+                .image_indices(&image_indices);
+
+            let queue_present_result = self
+                .swapchain_loader
+                .queue_present(self.swapchain.present_queue, &present_info);
+
+            match queue_present_result {
+                Ok(_) => {}
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    eprintln!("ERROR_OUT_OF_DATE_KHR caught");
                 }
-            });
+                Err(err) => panic!("Failed to present queue: {:?}", err),
+            }
+        }
+    }
+}
 
+impl Drop for Engine {
+    fn drop(&mut self) {
+        unsafe {
             self.device.device_wait_idle().unwrap();
-            for pipeline in graphics_pipelines {
+
+            // SECTION pipeline
+            for &pipeline in self.graphics_pipelines.iter() {
                 self.device.destroy_pipeline(pipeline, None);
             }
-            self.device.destroy_pipeline_layout(pipeline_layout, None);
             self.device
-                .destroy_shader_module(vertex_shader_module, None);
+                .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device
-                .destroy_shader_module(fragment_shader_module, None);
-            self.device.free_memory(index_buffer_memory, None);
-            self.device.destroy_buffer(index_buffer, None);
-            self.device.free_memory(vertex_input_buffer_memory, None);
-            self.device.destroy_buffer(vertex_input_buffer, None);
-            for framebuffer in framebuffers {
+                .destroy_shader_module(self.vertex_shader_module, None);
+            self.device
+                .destroy_shader_module(self.fragment_shader_module, None);
+            self.device.free_memory(self.index_buffer_memory, None);
+            self.device.destroy_buffer(self.index_buffer, None);
+            self.device
+                .free_memory(self.vertex_input_buffer_memory, None);
+            self.device.destroy_buffer(self.vertex_input_buffer, None);
+            for &framebuffer in self.framebuffers.iter() {
                 self.device.destroy_framebuffer(framebuffer, None);
             }
-            self.device.destroy_render_pass(renderpass, None);
-        }
+            self.device.destroy_render_pass(self.renderpass, None);
 
-        self.render_loop(|| {}).unwrap();
-    }
-
-    fn render_loop<F: Fn()>(&self, f: F) -> Result<(), impl Error> {
-        self.event_loop.borrow_mut().run_on_demand(|event, elwp| {
-            elwp.set_control_flow(ControlFlow::Poll);
-            match event {
-                Event::WindowEvent {
-                    event: window_event,
-                    ..
-                } => match window_event {
-                    WindowEvent::CloseRequested
-                    | WindowEvent::KeyboardInput {
-                        event:
-                            KeyEvent {
-                                state: ElementState::Pressed,
-                                logical_key: Key::Named(NamedKey::Escape),
-                                ..
-                            },
-                        ..
-                    } => {
-                        elwp.exit();
-                    }
-                    WindowEvent::Resized(new_size) => unsafe {
-                        self.device.device_wait_idle().unwrap();
-                        // recreate resources
-                    },
-                    _ => (),
-                },
-                Event::AboutToWait => f(),
-                _ => (),
-            }
-        })
-    }
-
-    // NOTE always wait device idle before destroying anyting
-    fn destroy_instance(&mut self) {
-        unsafe {
-            self.destroy_surface();
-
-            self.device.destroy_device(None);
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_call_back, None);
-            self.instance.destroy_instance(None);
-        }
-    }
-
-    // NOTE always wait device idle before destroying anyting
-    fn destroy_surface(&mut self) {
-        unsafe {
-            self.destroy_swapchain();
-
-            self.surface_loader
-                .destroy_surface(self.surface.surface, None);
-        }
-    }
-
-    // NOTE always wait device idle before destroying anyting
-    fn destroy_swapchain(&mut self) {
-        unsafe {
+            // SECTION swapchain
             self.device
                 .destroy_semaphore(self.swapchain.resources.present_complete_semaphore, None);
             self.device
@@ -1132,15 +1082,16 @@ impl Engine {
 
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain.swapchain, None);
-        }
-    }
-}
 
-impl Drop for Engine {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.device_wait_idle().unwrap();
-            self.destroy_instance();
+            // SECTION surface
+            self.surface_loader
+                .destroy_surface(self.surface.surface, None);
+
+            // SECTION device and instance
+            self.device.destroy_device(None);
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_call_back, None);
+            self.instance.destroy_instance(None);
         }
     }
 }
