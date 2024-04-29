@@ -136,7 +136,7 @@ fn find_memorytype_index(
 
 #[derive(Default)]
 struct EngineSurface {
-    surface: vk::SurfaceKHR,
+    surface_khr: vk::SurfaceKHR,
     format: vk::SurfaceFormatKHR,
     capabilities: vk::SurfaceCapabilitiesKHR,
     resolution: vk::Extent2D,
@@ -144,7 +144,7 @@ struct EngineSurface {
 
 #[derive(Default)]
 struct EngineSwapchain {
-    swapchain: vk::SwapchainKHR,
+    swapchain_khr: vk::SwapchainKHR,
     desired_image_count: u32,
     present_mode: vk::PresentModeKHR,
     present_queue: vk::Queue,
@@ -229,60 +229,17 @@ impl Engine {
 
             let instance = Engine::create_instance(&entry, &window)?;
 
-            let pdevices = instance
-                .enumerate_physical_devices()
-                .expect("Physical device error");
-
             let surface_loader = surface::Instance::new(&entry, &instance);
 
             let (debug_utils_loader, debug_call_back) =
                 Engine::create_debug_utils_messenger(&entry, &instance)?;
 
-            // SECTION SURFACE
+            let pdevices = instance
+                .enumerate_physical_devices()
+                .expect("Physical device error");
 
-            let surface = ash_window::create_surface(
-                &entry,
-                &instance,
-                window.display_handle()?.as_raw(),
-                window.window_handle()?.as_raw(),
-                None,
-            )
-            .unwrap();
-
-            let (pdevice, queue_family_index) = pdevices
-                .iter()
-                .find_map(|pdevice| {
-                    instance
-                        .get_physical_device_queue_family_properties(*pdevice)
-                        .iter()
-                        .enumerate()
-                        .find_map(|(index, info)| {
-                            let supports_graphic_and_surface =
-                                info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                                    && surface_loader
-                                        .get_physical_device_surface_support(
-                                            *pdevice,
-                                            index as u32,
-                                            surface,
-                                        )
-                                        .unwrap();
-                            if supports_graphic_and_surface {
-                                Some((*pdevice, index))
-                            } else {
-                                None
-                            }
-                        })
-                })
-                .expect("Couldn't find suitable device.");
-            let queue_family_index = queue_family_index as u32;
-
-            let surface_format = surface_loader
-                .get_physical_device_surface_formats(pdevice, surface)
-                .unwrap()[0];
-
-            let surface_capabilities = surface_loader
-                .get_physical_device_surface_capabilities(pdevice, surface)
-                .unwrap();
+            let (surface, pdevice, queue_family_index) =
+                Engine::create_surface(&entry, &instance, &window, &pdevices, &surface_loader)?;
 
             let priorities = [1.0];
             let queue_info = vk::DeviceQueueCreateInfo::default()
@@ -306,7 +263,7 @@ impl Engine {
                 .unwrap();
 
             let present_modes = surface_loader
-                .get_physical_device_surface_present_modes(pdevice, surface)
+                .get_physical_device_surface_present_modes(pdevice, surface.surface_khr)
                 .unwrap();
             let present_mode = present_modes
                 .iter()
@@ -317,33 +274,34 @@ impl Engine {
 
             let present_queue = device.get_device_queue(queue_family_index, 0);
 
-            let mut desired_image_count = surface_capabilities.min_image_count + 1;
-            if surface_capabilities.max_image_count > 0
-                && desired_image_count > surface_capabilities.max_image_count
+            let mut desired_image_count = surface.capabilities.min_image_count + 1;
+            if surface.capabilities.max_image_count > 0
+                && desired_image_count > surface.capabilities.max_image_count
             {
-                desired_image_count = surface_capabilities.max_image_count;
+                desired_image_count = surface.capabilities.max_image_count;
             }
-            let surface_resolution = match surface_capabilities.current_extent.width {
+            let surface_resolution = match surface.capabilities.current_extent.width {
                 u32::MAX => vk::Extent2D {
                     width: window_width,
                     height: window_height,
                 },
-                _ => surface_capabilities.current_extent,
+                _ => surface.capabilities.current_extent,
             };
-            let pre_transform = if surface_capabilities
+            let pre_transform = if surface
+                .capabilities
                 .supported_transforms
                 .contains(vk::SurfaceTransformFlagsKHR::IDENTITY)
             {
                 vk::SurfaceTransformFlagsKHR::IDENTITY
             } else {
-                surface_capabilities.current_transform
+                surface.capabilities.current_transform
             };
 
             let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
-                .surface(surface)
+                .surface(surface.surface_khr)
                 .min_image_count(desired_image_count)
-                .image_color_space(surface_format.color_space)
-                .image_format(surface_format.format)
+                .image_color_space(surface.format.color_space)
+                .image_format(surface.format.format)
                 .image_extent(surface_resolution)
                 .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
                 .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
@@ -380,7 +338,7 @@ impl Engine {
                 .map(|&image| {
                     let create_view_info = vk::ImageViewCreateInfo::default()
                         .view_type(vk::ImageViewType::TYPE_2D)
-                        .format(surface_format.format)
+                        .format(surface.format.format)
                         .components(vk::ComponentMapping {
                             r: vk::ComponentSwizzle::R,
                             g: vk::ComponentSwizzle::G,
@@ -523,7 +481,7 @@ impl Engine {
 
             let renderpass_attachments = [
                 vk::AttachmentDescription {
-                    format: surface_format.format,
+                    format: surface.format.format,
                     samples: vk::SampleCountFlags::TYPE_1,
                     load_op: vk::AttachmentLoadOp::CLEAR,
                     store_op: vk::AttachmentStoreOp::STORE,
@@ -841,16 +799,11 @@ impl Engine {
                     queue_family_index,
                     pdevice,
 
-                    surface: EngineSurface {
-                        surface,
-                        capabilities: surface_capabilities,
-                        format: surface_format,
-                        resolution: surface_resolution,
-                    },
+                    surface,
 
                     swapchain_loader,
                     swapchain: EngineSwapchain {
-                        swapchain,
+                        swapchain_khr: swapchain,
                         desired_image_count,
                         present_mode,
                         present_queue,
@@ -962,10 +915,73 @@ impl Engine {
         Ok((debug_utils_loader, debug_call_back))
     }
 
+    unsafe fn create_surface(
+        entry: &Entry,
+        instance: &Instance,
+        window: &winit::window::Window,
+        pdevices: &Vec<ash::vk::PhysicalDevice>,
+        surface_loader: &surface::Instance,
+    ) -> Result<(EngineSurface, vk::PhysicalDevice, u32), Box<dyn Error>> {
+        let surface = ash_window::create_surface(
+            &entry,
+            &instance,
+            window.display_handle()?.as_raw(),
+            window.window_handle()?.as_raw(),
+            None,
+        )
+        .unwrap();
+
+        let (pdevice, queue_family_index) = pdevices
+            .iter()
+            .find_map(|pdevice| {
+                instance
+                    .get_physical_device_queue_family_properties(*pdevice)
+                    .iter()
+                    .enumerate()
+                    .find_map(|(index, info)| {
+                        let supports_graphic_and_surface =
+                            info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                                && surface_loader
+                                    .get_physical_device_surface_support(
+                                        *pdevice,
+                                        index as u32,
+                                        surface,
+                                    )
+                                    .unwrap();
+                        if supports_graphic_and_surface {
+                            Some((*pdevice, index))
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .expect("Couldn't find suitable device.");
+        let queue_family_index = queue_family_index as u32;
+
+        let surface_format = surface_loader
+            .get_physical_device_surface_formats(pdevice, surface)
+            .unwrap()[0];
+
+        let surface_capabilities = surface_loader
+            .get_physical_device_surface_capabilities(pdevice, surface)
+            .unwrap();
+
+        Ok((
+            EngineSurface {
+                surface_khr: surface,
+                format: surface_format,
+                capabilities: surface_capabilities,
+                resolution: surface_capabilities.current_extent,
+            },
+            pdevice,
+            queue_family_index,
+        ))
+    }
+
     pub fn render(&self) {
         unsafe {
             let result = self.swapchain_loader.acquire_next_image(
-                self.swapchain.swapchain,
+                self.swapchain.swapchain_khr,
                 u64::MAX,
                 self.swapchain.resources.present_complete_semaphore,
                 vk::Fence::null(),
@@ -1045,7 +1061,7 @@ impl Engine {
                 },
             );
             let wait_semaphors = [self.swapchain.resources.rendering_complete_semaphore];
-            let swapchains = [self.swapchain.swapchain];
+            let swapchains = [self.swapchain.swapchain_khr];
             let image_indices = [present_index];
             let present_info = vk::PresentInfoKHR::default()
                 .wait_semaphores(&wait_semaphors) // &self.rendering_complete_semaphore)
@@ -1103,7 +1119,7 @@ impl Engine {
                 self.device.destroy_image_view(image_view, None);
             }
             self.swapchain_loader
-                .destroy_swapchain(self.swapchain.swapchain, None);
+                .destroy_swapchain(self.swapchain.swapchain_khr, None);
 
             //
             self.device
@@ -1161,7 +1177,7 @@ impl Drop for Engine {
                 .destroy_debug_utils_messenger(self.debug_call_back, None);
 
             self.surface_loader
-                .destroy_surface(self.surface.surface, None);
+                .destroy_surface(self.surface.surface_khr, None);
 
             self.instance.destroy_instance(None);
         }
