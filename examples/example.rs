@@ -1,3 +1,4 @@
+use log::debug;
 use nhope::Engine;
 use std::error::Error;
 
@@ -29,8 +30,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } => {
                     elwt.exit();
                 }
-                WindowEvent::Resized(_new_size) => {
-                    // IMPLEMENT
+                WindowEvent::Resized(size) => {
+                    debug!("Window resizing to {:?}", size);
                 }
                 _ => (),
             },
