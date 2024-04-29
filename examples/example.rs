@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 WindowEvent::Resized(size) => {
                     debug!("Window resizing to {:?}", size);
-                    engine.recreate_surface(size);
+                    engine.recreate_swapchain(size);
                 }
                 _ => (),
             },

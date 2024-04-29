@@ -289,6 +289,8 @@ impl Engine {
                 .create_debug_utils_messenger(&debug_info, None)
                 .unwrap();
 
+            // SECTION SURFACE
+
             let surface = ash_window::create_surface(
                 &entry,
                 &instance,
@@ -1051,7 +1053,7 @@ impl Engine {
         })
     }
 
-    pub fn recreate_surface(&mut self, size: PhysicalSize<u32>) {
+    pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
         if size.width == 0 || size.height == 0 {
             return;
         }
@@ -1063,11 +1065,13 @@ impl Engine {
         }
 
         unsafe {
-            // self.device.device_wait_idle().unwrap();
-            // self.destroy_resource();
-            // self.destroy_swapchain();
-            // self.destroy_surface();
+            self.device.device_wait_idle().unwrap();
 
+            self.destroy_swapchain();
+
+            // self.create_swapchain();
+            // self.create_image_views();
+            // self.create_framebuffers();
             // IMPLEMENTATION
         }
     }
