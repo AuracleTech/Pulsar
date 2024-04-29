@@ -272,22 +272,8 @@ impl Engine {
 
             let surface_loader = surface::Instance::new(&entry, &instance);
 
-            let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
-                .message_severity(
-                    vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
-                )
-                .message_type(
-                    vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                        | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
-                        | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
-                )
-                .pfn_user_callback(Some(vulkan_debug_callback));
-            let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
-            let debug_call_back = debug_utils_loader
-                .create_debug_utils_messenger(&debug_info, None)
-                .unwrap();
+            let (debug_utils_loader, debug_call_back) =
+                Engine::create_debug_utils_messenger(&entry, &instance)?;
 
             // SECTION SURFACE
 
@@ -941,6 +927,30 @@ impl Engine {
                 event_loop,
             ))
         }
+    }
+
+    unsafe fn create_debug_utils_messenger(
+        entry: &Entry,
+        instance: &Instance,
+    ) -> Result<(ash::ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT), Box<dyn Error>> {
+        let debug_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+            .message_severity(
+                vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                    | vk::DebugUtilsMessageSeverityFlagsEXT::INFO,
+            )
+            .message_type(
+                vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                    | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
+                    | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
+            )
+            .pfn_user_callback(Some(vulkan_debug_callback));
+        let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
+        let debug_call_back = debug_utils_loader
+            .create_debug_utils_messenger(&debug_info, None)
+            .unwrap();
+
+        Ok((debug_utils_loader, debug_call_back))
     }
 
     pub fn render(&self) {
