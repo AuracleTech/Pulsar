@@ -1067,40 +1067,62 @@ impl Engine {
         unsafe {
             self.device.device_wait_idle().unwrap();
 
-            self.destroy_swapchain();
+            // self.destroy_swapchain();
 
             // self.create_swapchain();
             // self.create_image_views();
             // self.create_framebuffers();
-            // IMPLEMENTATION
-        }
-    }
-
-    fn destroy_resource(&mut self) {
-        unsafe {
-            for &pipeline in self.graphics_pipelines.iter() {
-                self.device.destroy_pipeline(pipeline, None);
-            }
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device
-                .destroy_shader_module(self.vertex_shader_module, None);
-            self.device
-                .destroy_shader_module(self.fragment_shader_module, None);
-            self.device.free_memory(self.index_buffer_memory, None);
-            self.device.destroy_buffer(self.index_buffer, None);
-            self.device
-                .free_memory(self.vertex_input_buffer_memory, None);
-            self.device.destroy_buffer(self.vertex_input_buffer, None);
-            for &framebuffer in self.framebuffers.iter() {
-                self.device.destroy_framebuffer(framebuffer, None);
-            }
-            self.device.destroy_render_pass(self.renderpass, None);
         }
     }
 
     fn destroy_swapchain(&mut self) {
         unsafe {
+            for &framebuffer in self.framebuffers.iter() {
+                self.device.destroy_framebuffer(framebuffer, None);
+            }
+            for &image_view in self.swapchain.present_image_views.iter() {
+                self.device.destroy_image_view(image_view, None);
+            }
+            self.swapchain_loader
+                .destroy_swapchain(self.swapchain.swapchain, None);
+
+            //
+            self.device
+                .free_memory(self.swapchain.resources.depth_image_memory, None);
+            self.device
+                .destroy_image_view(self.swapchain.resources.depth_image_view, None);
+            self.device
+                .destroy_image(self.swapchain.resources.depth_image, None);
+        }
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.device_wait_idle().unwrap();
+
+            self.device
+                .destroy_shader_module(self.vertex_shader_module, None);
+            self.device
+                .destroy_shader_module(self.fragment_shader_module, None);
+
+            self.device.free_memory(self.index_buffer_memory, None);
+            self.device.destroy_buffer(self.index_buffer, None);
+            self.device
+                .free_memory(self.vertex_input_buffer_memory, None);
+            self.device.destroy_buffer(self.vertex_input_buffer, None);
+
+            self.destroy_swapchain();
+
+            for &pipeline in self.graphics_pipelines.iter() {
+                self.device.destroy_pipeline(pipeline, None);
+            }
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+
+            self.device.destroy_render_pass(self.renderpass, None);
+
             self.device
                 .destroy_semaphore(self.swapchain.resources.present_complete_semaphore, None);
             self.device
@@ -1112,44 +1134,16 @@ impl Engine {
                 .destroy_fence(self.swapchain.resources.setup_commands_reuse_fence, None);
 
             self.device
-                .free_memory(self.swapchain.resources.depth_image_memory, None);
-            self.device
-                .destroy_image_view(self.swapchain.resources.depth_image_view, None);
-            self.device
-                .destroy_image(self.swapchain.resources.depth_image, None);
-
-            for &image_view in self.swapchain.present_image_views.iter() {
-                self.device.destroy_image_view(image_view, None);
-            }
-
-            self.device
                 .destroy_command_pool(self.swapchain.resources.pool, None);
 
-            self.swapchain_loader
-                .destroy_swapchain(self.swapchain.swapchain, None);
-        }
-    }
-
-    fn destroy_surface(&mut self) {
-        unsafe {
-            self.surface_loader
-                .destroy_surface(self.surface.surface, None);
-        }
-    }
-}
-
-impl Drop for Engine {
-    fn drop(&mut self) {
-        unsafe {
-            self.device.device_wait_idle().unwrap();
-            self.destroy_resource();
-            self.destroy_swapchain();
-            self.destroy_surface();
-
-            // SECTION device and instance
             self.device.destroy_device(None);
+
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_call_back, None);
+
+            self.surface_loader
+                .destroy_surface(self.surface.surface, None);
+
             self.instance.destroy_instance(None);
         }
     }
