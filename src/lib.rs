@@ -10,7 +10,7 @@ use ash::{
 use log::debug;
 use model::{Mesh, Vertex};
 use std::{
-    borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
+    borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, rc::Rc,
     thread::JoinHandle,
 };
 use winit::{
@@ -1064,14 +1064,16 @@ impl Engine {
 
         unsafe {
             // self.device.device_wait_idle().unwrap();
+            // self.destroy_resource();
+            // self.destroy_swapchain();
             // self.destroy_surface();
+
+            // IMPLEMENTATION
         }
     }
 
-    // NOTE always wait device idle before destroying
-    fn destroy_surface(&mut self) {
+    fn destroy_resource(&mut self) {
         unsafe {
-            // SECTION pipeline
             for &pipeline in self.graphics_pipelines.iter() {
                 self.device.destroy_pipeline(pipeline, None);
             }
@@ -1090,8 +1092,11 @@ impl Engine {
                 self.device.destroy_framebuffer(framebuffer, None);
             }
             self.device.destroy_render_pass(self.renderpass, None);
+        }
+    }
 
-            // SECTION swapchain
+    fn destroy_swapchain(&mut self) {
+        unsafe {
             self.device
                 .destroy_semaphore(self.swapchain.resources.present_complete_semaphore, None);
             self.device
@@ -1118,8 +1123,11 @@ impl Engine {
 
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain.swapchain, None);
+        }
+    }
 
-            // SECTION surface
+    fn destroy_surface(&mut self) {
+        unsafe {
             self.surface_loader
                 .destroy_surface(self.surface.surface, None);
         }
@@ -1130,7 +1138,8 @@ impl Drop for Engine {
     fn drop(&mut self) {
         unsafe {
             self.device.device_wait_idle().unwrap();
-
+            self.destroy_resource();
+            self.destroy_swapchain();
             self.destroy_surface();
 
             // SECTION device and instance
