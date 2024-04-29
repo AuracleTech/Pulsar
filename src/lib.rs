@@ -277,8 +277,6 @@ impl Engine {
             let (present_complete_semaphore, rendering_complete_semaphore) =
                 Engine::create_semaphores(&device)?;
 
-            // SECTION
-
             let renderpass = Engine::create_renderpass(&surface, &device)?;
 
             let (
@@ -289,15 +287,7 @@ impl Engine {
                 pipeline_layout,
                 vertex_shader_module,
                 fragment_shader_module,
-            ) = Engine::create_pipeline(
-                &device,
-                &swapchain,
-                &surface,
-                &pdevice,
-                &queue_family_index,
-                &swapchain_loader,
-                renderpass,
-            )?;
+            ) = Engine::create_pipeline(&device, &surface, renderpass)?;
 
             let framebuffers = Engine::create_framebuffers(
                 &device,
@@ -942,20 +932,8 @@ impl Engine {
 
     unsafe fn create_pipeline(
         device: &Device,
-        swapchain: &EngineSwapchain,
         surface: &EngineSurface,
-        pdevice: &vk::PhysicalDevice,
-        queue_family_index: &u32,
-        swapchain_loader: &swapchain::Device,
         renderpass: vk::RenderPass,
-        // RETURN
-        // graphic_pipeline,
-        // viewports,
-        // scissors,
-        // graphics_pipelines,
-        // pipeline_layout,
-        // vertex_shader_module,
-        // fragment_shader_module,
     ) -> Result<
         (
             vk::Pipeline,
