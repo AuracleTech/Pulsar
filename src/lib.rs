@@ -7,12 +7,14 @@ use ash::{
     util::Align,
     vk, Device, Entry, Instance,
 };
+use log::debug;
 use model::{Mesh, Vertex};
 use std::{
     borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
     thread::JoinHandle,
 };
 use winit::{
+    dpi::PhysicalSize,
     event_loop::EventLoop,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::WindowBuilder,
@@ -110,7 +112,7 @@ unsafe extern "system" fn vulkan_debug_callback(
         ffi::CStr::from_ptr(callback_data.p_message).to_string_lossy()
     };
 
-    println!(
+    debug!(
         "{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n",
     );
 
@@ -143,6 +145,8 @@ struct EngineSurface {
 #[derive(Default)]
 struct EngineSwapchain {
     swapchain: vk::SwapchainKHR,
+    desired_image_count: u32,
+    present_mode: vk::PresentModeKHR,
     present_queue: vk::Queue,
     present_images: Vec<vk::Image>,
     present_image_views: Vec<vk::ImageView>,
@@ -209,6 +213,8 @@ impl Engine {
         window_width: u32,
         window_height: u32,
     ) -> Result<(Self, EventLoop<()>), Box<dyn Error>> {
+        env_logger::init();
+
         unsafe {
             let event_loop = EventLoop::new()?;
             let window = WindowBuilder::new()
@@ -894,6 +900,8 @@ impl Engine {
                     swapchain_loader,
                     swapchain: EngineSwapchain {
                         swapchain,
+                        desired_image_count,
+                        present_mode,
                         present_queue,
                         present_images,
                         present_image_views,
@@ -935,15 +943,20 @@ impl Engine {
 
     pub fn render(&self) {
         unsafe {
-            let (present_index, _) = self
-                .swapchain_loader
-                .acquire_next_image(
-                    self.swapchain.swapchain,
-                    u64::MAX,
-                    self.swapchain.resources.present_complete_semaphore,
-                    vk::Fence::null(),
-                )
-                .unwrap();
+            let result = self.swapchain_loader.acquire_next_image(
+                self.swapchain.swapchain,
+                u64::MAX,
+                self.swapchain.resources.present_complete_semaphore,
+                vk::Fence::null(),
+            );
+            let (present_index, _) = match result {
+                Ok(result) => result,
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    eprintln!("ERROR_OUT_OF_DATE_KHR caught");
+                    return;
+                }
+                Err(err) => panic!("Failed to acquire next image: {:?}", err),
+            };
             let clear_values = [
                 vk::ClearValue {
                     color: vk::ClearColorValue {
@@ -1032,23 +1045,32 @@ impl Engine {
         }
     }
 
-    // create
-    pub fn start_input_thread(&self) -> JoinHandle<()> {
+    pub fn start_update_thread(&self) -> JoinHandle<()> {
         std::thread::spawn(move || {
-            let mut count = 0;
-            loop {
-                count += 1;
-                println!("Input thread count: {}", count);
-            }
+            // IMPLEMENTATION
         })
     }
-}
 
-impl Drop for Engine {
-    fn drop(&mut self) {
+    pub fn recreate_surface(&mut self, size: PhysicalSize<u32>) {
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
+
+        if size.width == self.surface.resolution.width
+            && size.height == self.surface.resolution.height
+        {
+            return;
+        }
+
         unsafe {
-            self.device.device_wait_idle().unwrap();
+            // self.device.device_wait_idle().unwrap();
+            // self.destroy_surface();
+        }
+    }
 
+    // NOTE always wait device idle before destroying
+    fn destroy_surface(&mut self) {
+        unsafe {
             // SECTION pipeline
             for &pipeline in self.graphics_pipelines.iter() {
                 self.device.destroy_pipeline(pipeline, None);
@@ -1100,6 +1122,16 @@ impl Drop for Engine {
             // SECTION surface
             self.surface_loader
                 .destroy_surface(self.surface.surface, None);
+        }
+    }
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        unsafe {
+            self.device.device_wait_idle().unwrap();
+
+            self.destroy_surface();
 
             // SECTION device and instance
             self.device.destroy_device(None);

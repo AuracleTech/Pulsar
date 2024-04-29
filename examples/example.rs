@@ -9,8 +9,8 @@ use winit::{
 };
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let (engine, event_loop) = Engine::new(1920, 1080)?;
-    engine.start_input_thread();
+    let (mut engine, event_loop) = Engine::new(1920, 1080)?;
+    engine.start_update_thread();
     event_loop.run(move |event, elwt| {
         elwt.set_control_flow(ControlFlow::Poll);
         match event {
@@ -32,6 +32,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
                 WindowEvent::Resized(size) => {
                     debug!("Window resizing to {:?}", size);
+                    engine.recreate_surface(size);
                 }
                 _ => (),
             },
