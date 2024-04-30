@@ -1,6 +1,5 @@
 use nhope::Engine;
 use std::error::Error;
-
 use winit::{
     event::{ElementState, Event, KeyEvent, WindowEvent},
     event_loop::ControlFlow,
