@@ -23,7 +23,7 @@ use winit::{
 use ash::util::*;
 use std::io::Cursor;
 
-const APP_NAME: &str = "Swain Engine";
+const APP_NAME: &str = "Nhope Engine";
 const APP_VERSION: &str = "0.1.0";
 
 #[macro_export]
@@ -206,6 +206,8 @@ pub struct Engine {
     vertex_shader_module: vk::ShaderModule,
     fragment_shader_module: vk::ShaderModule,
     index_buffer_memory: vk::DeviceMemory,
+
+    rendering: bool,
 }
 
 impl Engine {
@@ -504,6 +506,8 @@ impl Engine {
                     vertex_shader_module,
                     fragment_shader_module,
                     index_buffer_memory,
+
+                    rendering: false,
                 },
                 event_loop,
             ))
@@ -1159,6 +1163,10 @@ impl Engine {
     }
 
     pub fn render(&self) {
+        if !self.rendering {
+            return;
+        }
+
         unsafe {
             let result = self.swapchain_loader.acquire_next_image(
                 self.swapchain.swapchain_khr,
@@ -1169,7 +1177,7 @@ impl Engine {
             let (present_index, _) = match result {
                 Ok(result) => result,
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    eprintln!("ERROR_OUT_OF_DATE_KHR caught");
+                    eprintln!("ERROR_OUT_OF_DATE_KHR caught at start of render loop");
                     return;
                 }
                 Err(err) => panic!("Failed to acquire next image: {:?}", err),
@@ -1255,7 +1263,7 @@ impl Engine {
             match queue_present_result {
                 Ok(_) => {}
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    eprintln!("ERROR_OUT_OF_DATE_KHR caught");
+                    eprintln!("ERROR_OUT_OF_DATE_KHR caught at present");
                 }
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
@@ -1269,7 +1277,10 @@ impl Engine {
     }
 
     pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
+        self.rendering = true;
+
         if size.width == 0 || size.height == 0 {
+            self.rendering = false;
             return;
         }
 
