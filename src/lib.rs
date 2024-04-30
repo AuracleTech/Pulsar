@@ -1277,7 +1277,6 @@ impl Engine {
     }
 
     pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
-        debug!("Window resizing to {:?}", size);
         self.rendering = true;
 
         if size.width == 0 || size.height == 0 {
@@ -1408,6 +1407,8 @@ impl Engine {
                     );
                 },
             );
+
+            self.render();
         }
     }
 
