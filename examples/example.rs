@@ -1,4 +1,3 @@
-use log::debug;
 use nhope::Engine;
 use std::error::Error;
 
