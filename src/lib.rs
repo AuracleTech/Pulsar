@@ -888,8 +888,6 @@ impl Engine {
             .bind_image_memory(depth_image, depth_image_memory, 0)
             .expect("Unable to bind depth image memory");
 
-        // FIX moved record out of here to the end of the chain
-
         let depth_image_view_info = vk::ImageViewCreateInfo::default()
             .subresource_range(
                 vk::ImageSubresourceRange::default()
@@ -1284,11 +1282,93 @@ impl Engine {
         unsafe {
             self.device.device_wait_idle().unwrap();
 
-            // self.destroy_swapchain();
+            self.destroy_swapchain();
 
-            // self.create_swapchain();
-            // self.create_image_views();
-            // self.create_framebuffers();
+            // swapchain
+            self.swapchain = Self::create_swapchain(
+                &self.device,
+                &self.surface_loader,
+                &self.surface,
+                self.pdevice,
+                self.queue_family_index,
+                size,
+                &self.swapchain_loader,
+            )
+            .unwrap();
+
+            // image_views
+            let (
+                present_images,
+                present_image_views,
+                depth_image_view,
+                depth_image,
+                depth_image_memory,
+                device_memory_properties,
+            ) = Self::create_views_and_depth(
+                &self.device,
+                &self.instance,
+                &self.swapchain,
+                &self.surface,
+                &self.pdevice,
+                &self.swapchain_loader,
+            )
+            .unwrap();
+
+            self.swapchain_resources.present_images = present_images;
+            self.swapchain_resources.present_image_views = present_image_views;
+            self.swapchain_resources.depth_image_view = depth_image_view;
+            self.swapchain_resources.depth_image = depth_image;
+            self.swapchain_resources.depth_image_memory = depth_image_memory;
+            self.device_memory_properties = device_memory_properties;
+
+            // framebuffers
+            let framebuffers = Self::create_framebuffers(
+                &self.device,
+                &self.surface,
+                &self.swapchain_resources.present_image_views,
+                depth_image_view,
+                self.renderpass,
+            )
+            .unwrap();
+
+            self.framebuffers = framebuffers;
+
+            // register depth image memory
+            record_submit_commandbuffer(
+                &self.device,
+                self.swapchain_resources.setup_command_buffer,
+                self.swapchain_resources.setup_commands_reuse_fence,
+                self.swapchain.present_queue,
+                &[],
+                &[],
+                &[],
+                |device, setup_command_buffer| {
+                    let layout_transition_barriers = vk::ImageMemoryBarrier::default()
+                        .image(depth_image)
+                        .dst_access_mask(
+                            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                        )
+                        .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                        .old_layout(vk::ImageLayout::UNDEFINED)
+                        .subresource_range(
+                            vk::ImageSubresourceRange::default()
+                                .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                                .layer_count(1)
+                                .level_count(1),
+                        );
+
+                    device.cmd_pipeline_barrier(
+                        setup_command_buffer,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[layout_transition_barriers],
+                    );
+                },
+            );
         }
     }
 
@@ -1303,7 +1383,6 @@ impl Engine {
             self.swapchain_loader
                 .destroy_swapchain(self.swapchain.swapchain_khr, None);
 
-            //
             self.device
                 .free_memory(self.swapchain_resources.depth_image_memory, None);
             self.device
