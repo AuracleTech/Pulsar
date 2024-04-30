@@ -7,7 +7,7 @@ use ash::{
     util::Align,
     vk, Device, Entry, Instance,
 };
-use log::{debug, info};
+use log::debug;
 use model::{Mesh, Vertex};
 use std::{
     borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, rc::Rc,
@@ -112,7 +112,7 @@ unsafe extern "system" fn vulkan_debug_callback(
     };
 
     debug!(
-        "{message_severity:?}:\n{message_type:?} [{message_id_name} ({message_id_number})] : {message}\n",
+        "{message_severity:?}: {message_type:?} [{message_id_name} ({message_id_number})] : {message}",
     );
 
     vk::FALSE
@@ -133,7 +133,6 @@ fn find_memorytype_index(
         .map(|(index, _memory_type)| index as _)
 }
 
-#[derive(Default)]
 struct EngineSurface {
     surface_khr: vk::SurfaceKHR,
     format: vk::SurfaceFormatKHR,
@@ -141,7 +140,6 @@ struct EngineSurface {
     resolution: vk::Extent2D,
 }
 
-#[derive(Default)]
 struct EngineSwapchain {
     swapchain_khr: vk::SwapchainKHR,
     desired_image_count: u32,
@@ -149,7 +147,6 @@ struct EngineSwapchain {
     present_queue: vk::Queue,
 }
 
-#[derive(Default)]
 struct SwapchainResources {
     pool: vk::CommandPool,
     draw_command_buffer: vk::CommandBuffer,
@@ -207,7 +204,7 @@ pub struct Engine {
     fragment_shader_module: vk::ShaderModule,
     index_buffer_memory: vk::DeviceMemory,
 
-    rendering: bool,
+    minimized: bool,
 }
 
 impl Engine {
@@ -360,8 +357,6 @@ impl Engine {
                 indices: vec![0, 1, 2],
             };
 
-            // SECTION
-
             let index_buffer_data = [0u32, 1, 2];
             let index_buffer_info = vk::BufferCreateInfo::default()
                 .size(mem::size_of_val(&index_buffer_data) as u64)
@@ -507,7 +502,7 @@ impl Engine {
                     fragment_shader_module,
                     index_buffer_memory,
 
-                    rendering: false,
+                    minimized: false,
                 },
                 event_loop,
             ))
@@ -1163,7 +1158,7 @@ impl Engine {
     }
 
     pub fn render(&self) {
-        if !self.rendering {
+        if !self.minimized {
             return;
         }
 
@@ -1277,12 +1272,12 @@ impl Engine {
     }
 
     pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
-        self.rendering = true;
-
         if size.width == 0 || size.height == 0 {
-            self.rendering = false;
+            self.minimized = false;
             return;
         }
+
+        self.minimized = true;
 
         if size.width == self.surface.resolution.width
             && size.height == self.surface.resolution.height
