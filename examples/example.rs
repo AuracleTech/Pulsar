@@ -30,10 +30,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 } => {
                     elwt.exit();
                 }
-                WindowEvent::Resized(size) => {
-                    debug!("Window resizing to {:?}", size);
-                    engine.recreate_swapchain(size);
-                }
+                WindowEvent::Resized(size) => engine.recreate_swapchain(size),
                 _ => (),
             },
             Event::AboutToWait => engine.render(),
