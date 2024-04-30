@@ -10,7 +10,7 @@ use ash::{
 use log::debug;
 use model::{Mesh, Vertex};
 use std::{
-    borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, rc::Rc,
+    borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
     thread::JoinHandle,
 };
 use winit::{
