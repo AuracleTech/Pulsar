@@ -7,7 +7,7 @@ use ash::{
     util::Align,
     vk, Device, Entry, Instance,
 };
-use log::debug;
+use log::{debug, info};
 use model::{Mesh, Vertex};
 use std::{
     borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, rc::Rc,
@@ -1277,6 +1277,7 @@ impl Engine {
     }
 
     pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
+        debug!("Window resizing to {:?}", size);
         self.rendering = true;
 
         if size.width == 0 || size.height == 0 {
@@ -1294,6 +1295,33 @@ impl Engine {
             self.device.device_wait_idle().unwrap();
 
             self.destroy_swapchain();
+
+            // surface
+            self.surface.resolution = vk::Extent2D {
+                width: size.width,
+                height: size.height,
+            };
+            self.surface.capabilities = self
+                .surface_loader
+                .get_physical_device_surface_capabilities(self.pdevice, self.surface.surface_khr)
+                .unwrap();
+
+            // viewports and scissors
+            self.viewports = [vk::Viewport {
+                x: 0.0,
+                y: 0.0,
+                width: size.width as f32,
+                height: size.height as f32,
+                min_depth: 0.0,
+                max_depth: 1.0,
+            }];
+            self.scissors = [vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent: vk::Extent2D {
+                    width: size.width,
+                    height: size.height,
+                },
+            }];
 
             // swapchain
             self.swapchain = Self::create_swapchain(
