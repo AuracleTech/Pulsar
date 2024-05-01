@@ -191,19 +191,20 @@ pub struct Engine {
     renderpass: vk::RenderPass,
     framebuffers: Vec<vk::Framebuffer>,
     graphic_pipeline: vk::Pipeline,
-    vertex_input_buffer: vk::Buffer,
-    index_buffer: vk::Buffer,
-    index_buffer_data: Vec<u32>,
     viewports: [vk::Viewport; 1],
     scissors: [vk::Rect2D; 1],
-    vertex_input_buffer_memory: vk::DeviceMemory,
     graphics_pipelines: Vec<vk::Pipeline>,
     pipeline_layout: vk::PipelineLayout,
     vertex_shader_module: vk::ShaderModule,
     fragment_shader_module: vk::ShaderModule,
-    index_buffer_memory: vk::DeviceMemory,
 
     minimized: bool,
+    // index_buffer: vk::Buffer,
+    // index_buffer_data: Vec<u32>,
+    // index_buffer_memory: vk::DeviceMemory,
+    // vertex_input_buffer_memory: vk::DeviceMemory,
+    // vertex_input_buffer: vk::Buffer,
+    registered_mesh: model::RegisteredMesh,
 }
 
 impl Engine {
@@ -339,8 +340,6 @@ impl Engine {
                 },
             );
 
-            // SECTION PIPELINES
-
             let mesh = Mesh {
                 vertices: vec![
                     Vertex {
@@ -358,96 +357,7 @@ impl Engine {
                 ],
                 indices: vec![00u32, 1, 2],
             };
-
-            let index_buffer_info = vk::BufferCreateInfo::default()
-                .size(mem::size_of_val(&mesh.indices) as u64)
-                .usage(vk::BufferUsageFlags::INDEX_BUFFER)
-                .sharing_mode(vk::SharingMode::EXCLUSIVE);
-
-            let index_buffer = device.create_buffer(&index_buffer_info, None).unwrap();
-            let index_buffer_memory_req = device.get_buffer_memory_requirements(index_buffer);
-            let index_buffer_memory_index = find_memorytype_index(
-                &index_buffer_memory_req,
-                &device_memory_properties,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            )
-            .expect("Unable to find suitable memorytype for the index buffer.");
-
-            let index_allocate_info = vk::MemoryAllocateInfo {
-                allocation_size: index_buffer_memory_req.size,
-                memory_type_index: index_buffer_memory_index,
-                ..Default::default()
-            };
-            let index_buffer_memory = device.allocate_memory(&index_allocate_info, None).unwrap();
-            let index_ptr = device
-                .map_memory(
-                    index_buffer_memory,
-                    0,
-                    index_buffer_memory_req.size,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .unwrap();
-            let mut index_slice = Align::new(
-                index_ptr,
-                mem::align_of::<u32>() as u64,
-                index_buffer_memory_req.size,
-            );
-            index_slice.copy_from_slice(&mesh.indices);
-            device.unmap_memory(index_buffer_memory);
-            device
-                .bind_buffer_memory(index_buffer, index_buffer_memory, 0)
-                .unwrap();
-
-            let vertex_input_buffer_info = vk::BufferCreateInfo {
-                size: 3 * mem::size_of::<Vertex>() as u64,
-                usage: vk::BufferUsageFlags::VERTEX_BUFFER,
-                sharing_mode: vk::SharingMode::EXCLUSIVE,
-                ..Default::default()
-            };
-
-            let vertex_input_buffer = device
-                .create_buffer(&vertex_input_buffer_info, None)
-                .unwrap();
-
-            let vertex_input_buffer_memory_req =
-                device.get_buffer_memory_requirements(vertex_input_buffer);
-
-            let vertex_input_buffer_memory_index = find_memorytype_index(
-                &vertex_input_buffer_memory_req,
-                &device_memory_properties,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            )
-            .expect("Unable to find suitable memorytype for the vertex buffer.");
-
-            let vertex_buffer_allocate_info = vk::MemoryAllocateInfo {
-                allocation_size: vertex_input_buffer_memory_req.size,
-                memory_type_index: vertex_input_buffer_memory_index,
-                ..Default::default()
-            };
-
-            let vertex_input_buffer_memory = device
-                .allocate_memory(&vertex_buffer_allocate_info, None)
-                .unwrap();
-
-            let vert_ptr = device
-                .map_memory(
-                    vertex_input_buffer_memory,
-                    0,
-                    vertex_input_buffer_memory_req.size,
-                    vk::MemoryMapFlags::empty(),
-                )
-                .unwrap();
-
-            let mut vert_align = Align::new(
-                vert_ptr,
-                mem::align_of::<Vertex>() as u64,
-                vertex_input_buffer_memory_req.size,
-            );
-            vert_align.copy_from_slice(&mesh.vertices);
-            device.unmap_memory(vertex_input_buffer_memory);
-            device
-                .bind_buffer_memory(vertex_input_buffer, vertex_input_buffer_memory, 0)
-                .unwrap();
+            let registered_mesh = mesh.register(&device, &device_memory_properties);
 
             let swapchain_resources = SwapchainResources {
                 pool,
@@ -491,17 +401,15 @@ impl Engine {
                     renderpass,
                     framebuffers,
                     graphic_pipeline,
-                    vertex_input_buffer,
-                    index_buffer,
-                    index_buffer_data: mesh.indices,
+
+                    registered_mesh,
+
                     viewports,
                     scissors,
-                    vertex_input_buffer_memory,
                     graphics_pipelines,
                     pipeline_layout,
                     vertex_shader_module,
                     fragment_shader_module,
-                    index_buffer_memory,
 
                     minimized: false,
                 },
@@ -1194,18 +1102,18 @@ impl Engine {
                     device.cmd_bind_vertex_buffers(
                         draw_command_buffer,
                         0,
-                        &[self.vertex_input_buffer],
+                        &[self.registered_mesh.vertex_buffer],
                         &[0],
                     );
                     device.cmd_bind_index_buffer(
                         draw_command_buffer,
-                        self.index_buffer,
+                        self.registered_mesh.index_buffer,
                         0,
                         vk::IndexType::UINT32,
                     );
                     device.cmd_draw_indexed(
                         draw_command_buffer,
-                        self.index_buffer_data.len() as u32,
+                        self.registered_mesh.mesh.indices.len() as u32,
                         1,
                         0,
                         0,
@@ -1409,11 +1317,14 @@ impl Drop for Engine {
             self.device
                 .destroy_shader_module(self.fragment_shader_module, None);
 
-            self.device.free_memory(self.index_buffer_memory, None);
-            self.device.destroy_buffer(self.index_buffer, None);
             self.device
-                .free_memory(self.vertex_input_buffer_memory, None);
-            self.device.destroy_buffer(self.vertex_input_buffer, None);
+                .free_memory(self.registered_mesh.index_buffer_memory, None);
+            self.device
+                .destroy_buffer(self.registered_mesh.index_buffer, None);
+            self.device
+                .free_memory(self.registered_mesh.vertex_buffer_memory, None);
+            self.device
+                .destroy_buffer(self.registered_mesh.vertex_buffer, None);
 
             self.destroy_swapchain();
 
