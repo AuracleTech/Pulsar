@@ -339,7 +339,7 @@ impl Engine {
 
             // SECTION PIPELINES
 
-            let triangle = Mesh {
+            let mesh = Mesh {
                 vertices: vec![
                     Vertex {
                         pos: [-1.0, 1.0, 0.0, 1.0],
@@ -354,12 +354,11 @@ impl Engine {
                         color: [1.0, 0.0, 0.0, 1.0],
                     },
                 ],
-                indices: vec![0, 1, 2],
+                indices: vec![00u32, 1, 2],
             };
 
-            let index_buffer_data = [0u32, 1, 2];
             let index_buffer_info = vk::BufferCreateInfo::default()
-                .size(mem::size_of_val(&index_buffer_data) as u64)
+                .size(mem::size_of_val(&mesh.indices) as u64)
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER)
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
@@ -391,7 +390,7 @@ impl Engine {
                 mem::align_of::<u32>() as u64,
                 index_buffer_memory_req.size,
             );
-            index_slice.copy_from_slice(&index_buffer_data);
+            index_slice.copy_from_slice(&mesh.indices);
             device.unmap_memory(index_buffer_memory);
             device
                 .bind_buffer_memory(index_buffer, index_buffer_memory, 0)
@@ -442,7 +441,7 @@ impl Engine {
                 mem::align_of::<Vertex>() as u64,
                 vertex_input_buffer_memory_req.size,
             );
-            vert_align.copy_from_slice(&triangle.vertices);
+            vert_align.copy_from_slice(&mesh.vertices);
             device.unmap_memory(vertex_input_buffer_memory);
             device
                 .bind_buffer_memory(vertex_input_buffer, vertex_input_buffer_memory, 0)
@@ -492,7 +491,7 @@ impl Engine {
                     graphic_pipeline,
                     vertex_input_buffer,
                     index_buffer,
-                    index_buffer_data: index_buffer_data.to_vec(),
+                    index_buffer_data: mesh.indices,
                     viewports,
                     scissors,
                     vertex_input_buffer_memory,
