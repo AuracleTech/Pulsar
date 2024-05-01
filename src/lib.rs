@@ -9,7 +9,7 @@ use ash::{
     vk, Device, Entry, Instance,
 };
 use log::debug;
-use model::{Mesh, Vertex};
+use model::{Mesh, RegisteredMesh, Vertex};
 use shaders::Shader;
 use std::{
     borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
@@ -204,7 +204,8 @@ pub struct Engine {
     // index_buffer_memory: vk::DeviceMemory,
     // vertex_input_buffer_memory: vk::DeviceMemory,
     // vertex_input_buffer: vk::Buffer,
-    registered_mesh: model::RegisteredMesh,
+    // registered_mesh: model::RegisteredMesh,
+    registered_meshes: Vec<RegisteredMesh>,
 }
 
 impl Engine {
@@ -359,6 +360,26 @@ impl Engine {
             };
             let registered_mesh = mesh.register(&device, &device_memory_properties);
 
+            let mesh_upside_down = Mesh {
+                vertices: vec![
+                    Vertex {
+                        pos: [-1.0, -1.0, 0.0, 1.0],
+                        color: [0.0, 1.0, 0.0, 1.0],
+                    },
+                    Vertex {
+                        pos: [1.0, -1.0, 0.0, 1.0],
+                        color: [0.0, 0.0, 1.0, 1.0],
+                    },
+                    Vertex {
+                        pos: [0.0, 1.0, 0.0, 1.0],
+                        color: [1.0, 0.0, 0.0, 1.0],
+                    },
+                ],
+                indices: vec![0u32, 1, 2],
+            };
+            let registered_mesh_upside_down =
+                mesh_upside_down.register(&device, &device_memory_properties);
+
             let swapchain_resources = SwapchainResources {
                 pool,
                 draw_command_buffer,
@@ -402,7 +423,7 @@ impl Engine {
                     framebuffers,
                     graphic_pipeline,
 
-                    registered_mesh,
+                    registered_meshes: vec![registered_mesh, registered_mesh_upside_down],
 
                     viewports,
                     scissors,
@@ -1099,26 +1120,51 @@ impl Engine {
                     );
                     device.cmd_set_viewport(draw_command_buffer, 0, &self.viewports);
                     device.cmd_set_scissor(draw_command_buffer, 0, &self.scissors);
-                    device.cmd_bind_vertex_buffers(
-                        draw_command_buffer,
-                        0,
-                        &[self.registered_mesh.vertex_buffer],
-                        &[0],
-                    );
-                    device.cmd_bind_index_buffer(
-                        draw_command_buffer,
-                        self.registered_mesh.index_buffer,
-                        0,
-                        vk::IndexType::UINT32,
-                    );
-                    device.cmd_draw_indexed(
-                        draw_command_buffer,
-                        self.registered_mesh.mesh.indices.len() as u32,
-                        1,
-                        0,
-                        0,
-                        1,
-                    );
+
+                    for registered_mesh in &self.registered_meshes {
+                        device.cmd_bind_vertex_buffers(
+                            draw_command_buffer,
+                            0,
+                            &[registered_mesh.vertex_buffer],
+                            &[0],
+                        );
+                        device.cmd_bind_index_buffer(
+                            draw_command_buffer,
+                            registered_mesh.index_buffer,
+                            0,
+                            vk::IndexType::UINT32,
+                        );
+                        device.cmd_draw_indexed(
+                            draw_command_buffer,
+                            registered_mesh.mesh.indices.len() as u32,
+                            1,
+                            0,
+                            0,
+                            1,
+                        );
+                    }
+
+                    // device.cmd_bind_vertex_buffers(
+                    //     draw_command_buffer,
+                    //     0,
+                    //     &[self.registered_mesh.vertex_buffer],
+                    //     &[0],
+                    // );
+                    // device.cmd_bind_index_buffer(
+                    //     draw_command_buffer,
+                    //     self.registered_mesh.index_buffer,
+                    //     0,
+                    //     vk::IndexType::UINT32,
+                    // );
+                    // device.cmd_draw_indexed(
+                    //     draw_command_buffer,
+                    //     self.registered_mesh.mesh.indices.len() as u32,
+                    //     1,
+                    //     0,
+                    //     0,
+                    //     1,
+                    // );
+
                     // Or draw without the index buffer
                     // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
                     device.cmd_end_render_pass(draw_command_buffer);
@@ -1317,14 +1363,16 @@ impl Drop for Engine {
             self.device
                 .destroy_shader_module(self.fragment_shader_module, None);
 
-            self.device
-                .free_memory(self.registered_mesh.index_buffer_memory, None);
-            self.device
-                .destroy_buffer(self.registered_mesh.index_buffer, None);
-            self.device
-                .free_memory(self.registered_mesh.vertex_buffer_memory, None);
-            self.device
-                .destroy_buffer(self.registered_mesh.vertex_buffer, None);
+            for registered_mesh in self.registered_meshes.iter() {
+                self.device
+                    .free_memory(registered_mesh.index_buffer_memory, None);
+                self.device
+                    .destroy_buffer(registered_mesh.index_buffer, None);
+                self.device
+                    .free_memory(registered_mesh.vertex_buffer_memory, None);
+                self.device
+                    .destroy_buffer(registered_mesh.vertex_buffer, None);
+            }
 
             self.destroy_swapchain();
 
