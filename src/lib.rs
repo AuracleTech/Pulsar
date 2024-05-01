@@ -1,5 +1,6 @@
 mod camera;
 mod model;
+mod shaders;
 
 use ash::{
     ext::debug_utils,
@@ -9,6 +10,7 @@ use ash::{
 };
 use log::debug;
 use model::{Mesh, Vertex};
+use shaders::Shader;
 use std::{
     borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
     thread::JoinHandle,
@@ -19,9 +21,6 @@ use winit::{
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::WindowBuilder,
 };
-
-use ash::util::*;
-use std::io::Cursor;
 
 const APP_NAME: &str = "Nhope Engine";
 const APP_VERSION: &str = "0.1.0";
@@ -213,6 +212,9 @@ impl Engine {
         window_height: u32,
     ) -> Result<(Self, EventLoop<()>), Box<dyn Error>> {
         env_logger::init();
+
+        #[cfg(debug_assertions)]
+        Shader::on_start_compile_shaders();
 
         unsafe {
             let event_loop = EventLoop::new()?;
@@ -942,43 +944,15 @@ impl Engine {
         ),
         Box<dyn Error>,
     > {
-        let mut vertex_spv_file = Cursor::new(&include_bytes!("../shaders/vert.spv")[..]);
-        let mut frag_spv_file = Cursor::new(&include_bytes!("../shaders/frag.spv")[..]);
+        let vertex_shader = Shader::from_filename("vert", vk::ShaderStageFlags::VERTEX, device);
+        let frag_shader = Shader::from_filename("frag", vk::ShaderStageFlags::FRAGMENT, device);
 
-        let vertex_code =
-            read_spv(&mut vertex_spv_file).expect("Failed to read vertex shader spv file");
-        let vertex_shader_info = vk::ShaderModuleCreateInfo::default().code(&vertex_code);
-
-        let frag_code =
-            read_spv(&mut frag_spv_file).expect("Failed to read fragment shader spv file");
-        let frag_shader_info = vk::ShaderModuleCreateInfo::default().code(&frag_code);
-
-        let vertex_shader_module = device
-            .create_shader_module(&vertex_shader_info, None)
-            .expect("Vertex shader module error");
-        let fragment_shader_module = device
-            .create_shader_module(&frag_shader_info, None)
-            .expect("Fragment shader module error");
-
-        let shader_entry_name = ffi::CStr::from_bytes_with_nul_unchecked(b"main\0");
         let shader_stage_create_infos = [
-            vk::PipelineShaderStageCreateInfo {
-                module: vertex_shader_module,
-                p_name: shader_entry_name.as_ptr(),
-                stage: vk::ShaderStageFlags::VERTEX,
-                ..Default::default()
-            },
-            vk::PipelineShaderStageCreateInfo {
-                s_type: vk::StructureType::PIPELINE_SHADER_STAGE_CREATE_INFO,
-                module: fragment_shader_module,
-                p_name: shader_entry_name.as_ptr(),
-                stage: vk::ShaderStageFlags::FRAGMENT,
-                ..Default::default()
-            },
+            vertex_shader.pipeline_shader_stage_create_info,
+            frag_shader.pipeline_shader_stage_create_info,
         ];
 
         let layout_create_info = vk::PipelineLayoutCreateInfo::default();
-
         let pipeline_layout = device
             .create_pipeline_layout(&layout_create_info, None)
             .unwrap();
@@ -1093,8 +1067,8 @@ impl Engine {
             scissors,
             graphics_pipelines,
             pipeline_layout,
-            vertex_shader_module,
-            fragment_shader_module,
+            vertex_shader.module,
+            frag_shader.module,
         ))
     }
 
