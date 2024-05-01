@@ -960,12 +960,6 @@ impl Engine {
             .create_shader_module(&frag_shader_info, None)
             .expect("Fragment shader module error");
 
-        let layout_create_info = vk::PipelineLayoutCreateInfo::default();
-
-        let pipeline_layout = device
-            .create_pipeline_layout(&layout_create_info, None)
-            .unwrap();
-
         let shader_entry_name = ffi::CStr::from_bytes_with_nul_unchecked(b"main\0");
         let shader_stage_create_infos = [
             vk::PipelineShaderStageCreateInfo {
@@ -982,6 +976,12 @@ impl Engine {
                 ..Default::default()
             },
         ];
+
+        let layout_create_info = vk::PipelineLayoutCreateInfo::default();
+
+        let pipeline_layout = device
+            .create_pipeline_layout(&layout_create_info, None)
+            .unwrap();
 
         let vertex_input_binding_descriptions = [vk::VertexInputBindingDescription {
             binding: 0,
