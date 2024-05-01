@@ -1074,7 +1074,7 @@ impl Engine {
             let (present_index, _) = match result {
                 Ok(result) => result,
                 Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    eprintln!("ERROR_OUT_OF_DATE_KHR caught at start of render loop");
+                    eprintln!("OUT_OF_DATE_KHR caught at start");
                     return;
                 }
                 Err(err) => panic!("Failed to acquire next image: {:?}", err),
@@ -1184,9 +1184,7 @@ impl Engine {
 
             match queue_present_result {
                 Ok(_) => {}
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    eprintln!("ERROR_OUT_OF_DATE_KHR caught at present");
-                }
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => eprintln!("OUT_OF_DATE_KHR at present"),
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
         }
