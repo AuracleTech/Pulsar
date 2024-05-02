@@ -11,6 +11,7 @@ use ash::{
 use log::debug;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
+use rand::Rng;
 use shaders::Shader;
 use std::{
     borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
@@ -203,6 +204,8 @@ pub struct Engine {
 
     minimized: bool,
     metrics: Metrics,
+
+    rng: rand::rngs::ThreadRng,
 }
 
 impl Engine {
@@ -211,6 +214,9 @@ impl Engine {
         window_height: u32,
     ) -> Result<(Self, EventLoop<()>), Box<dyn Error>> {
         env_logger::init();
+
+        // TODO seeder RNG only
+        let mut rng = rand::thread_rng();
 
         #[cfg(debug_assertions)]
         Shader::on_start_compile_shaders();
@@ -338,44 +344,28 @@ impl Engine {
                 },
             );
 
-            let mesh = Mesh {
-                vertices: vec![
-                    Vertex {
-                        pos: [-1.0, 1.0, 0.0, 1.0],
-                        color: [0.0, 1.0, 0.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [1.0, 1.0, 0.0, 1.0],
-                        color: [0.0, 0.0, 1.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [0.0, -1.0, 0.0, 1.0],
-                        color: [1.0, 0.0, 0.0, 1.0],
-                    },
-                ],
-                indices: vec![00u32, 1, 2],
-            };
-            let registered_mesh = mesh.register(&device, &device_memory_properties);
+            let mut registered_meshes = Vec::new();
 
-            let mesh_upside_down = Mesh {
-                vertices: vec![
-                    Vertex {
-                        pos: [-1.0, -1.0, 0.0, 1.0],
-                        color: [0.0, 1.0, 0.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [1.0, -1.0, 0.0, 1.0],
-                        color: [0.0, 0.0, 1.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [0.0, 1.0, 0.0, 1.0],
-                        color: [1.0, 0.0, 0.0, 1.0],
-                    },
-                ],
-                indices: vec![0u32, 1, 2],
-            };
-            let registered_mesh_upside_down =
-                mesh_upside_down.register(&device, &device_memory_properties);
+            for _ in 0..100 {
+                let mut vertices = Vec::new();
+                let indices = vec![0u32, 1, 2];
+                for _ in 0..3 {
+                    let x = rng.gen_range(-1.0..1.0);
+                    let y = rng.gen_range(-1.0..1.0);
+
+                    let red = rng.gen_range(0.0..1.0);
+                    let green = rng.gen_range(0.0..1.0);
+                    let blue = rng.gen_range(0.0..1.0);
+                    let vertex = Vertex {
+                        pos: [x, y, 1.0, 1.0],
+                        color: [red, green, blue, 1.0],
+                    };
+                    vertices.push(vertex);
+                }
+                let mesh = Mesh { vertices, indices };
+                let registered_mesh = mesh.register(&device, &device_memory_properties);
+                registered_meshes.push(registered_mesh);
+            }
 
             let swapchain_resources = SwapchainResources {
                 pool,
@@ -394,6 +384,8 @@ impl Engine {
 
             Ok((
                 Self {
+                    rng,
+
                     window,
                     entry,
 
@@ -427,7 +419,7 @@ impl Engine {
                     vertex_shader_module,
                     fragment_shader_module,
 
-                    registered_meshes: vec![registered_mesh, registered_mesh_upside_down],
+                    registered_meshes,
 
                     minimized: false,
 

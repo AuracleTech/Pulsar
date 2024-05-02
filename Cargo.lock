@@ -1015,6 +1015,7 @@ dependencies = [
  "env_logger",
  "image",
  "log",
+ "rand",
  "winit",
 ]
 

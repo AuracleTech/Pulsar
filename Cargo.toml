@@ -17,3 +17,4 @@ ash = { version = "0.38", default-features = false, features = [
 ash-window = { version = "0.13.0" }
 log = "0.4.21"
 env_logger = "0.11.3"
+rand = "0.8.5"
