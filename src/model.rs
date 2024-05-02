@@ -32,7 +32,8 @@ impl Mesh {
     ) -> RegisteredMesh {
         unsafe {
             let index_buffer_info = vk::BufferCreateInfo::default()
-                .size(mem::size_of_val(&self.indices) as u64)
+                .size((self.indices.len() * mem::size_of::<u32>()) as u64)
+                // .size(mem::size_of_val(&self.indices) as u64) // TEST
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER)
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
@@ -71,7 +72,7 @@ impl Mesh {
                 .unwrap();
 
             let vertex_input_buffer_info = vk::BufferCreateInfo {
-                size: 3 * mem::size_of::<Vertex>() as u64,
+                size: (self.vertices.len() * mem::size_of::<Vertex>()) as u64,
                 usage: vk::BufferUsageFlags::VERTEX_BUFFER,
                 sharing_mode: vk::SharingMode::EXCLUSIVE,
                 ..Default::default()
