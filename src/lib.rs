@@ -1,14 +1,15 @@
 mod camera;
+mod metrics;
 mod model;
 mod shaders;
 
 use ash::{
     ext::debug_utils,
     khr::{surface, swapchain},
-    util::Align,
     vk, Device, Entry, Instance,
 };
 use log::debug;
+use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
 use shaders::Shader;
 use std::{
@@ -198,14 +199,10 @@ pub struct Engine {
     vertex_shader_module: vk::ShaderModule,
     fragment_shader_module: vk::ShaderModule,
 
-    minimized: bool,
-    // index_buffer: vk::Buffer,
-    // index_buffer_data: Vec<u32>,
-    // index_buffer_memory: vk::DeviceMemory,
-    // vertex_input_buffer_memory: vk::DeviceMemory,
-    // vertex_input_buffer: vk::Buffer,
-    // registered_mesh: model::RegisteredMesh,
     registered_meshes: Vec<RegisteredMesh>,
+
+    minimized: bool,
+    metrics: Metrics,
 }
 
 impl Engine {
@@ -423,8 +420,6 @@ impl Engine {
                     framebuffers,
                     graphic_pipeline,
 
-                    registered_meshes: vec![registered_mesh, registered_mesh_upside_down],
-
                     viewports,
                     scissors,
                     graphics_pipelines,
@@ -432,7 +427,11 @@ impl Engine {
                     vertex_shader_module,
                     fragment_shader_module,
 
+                    registered_meshes: vec![registered_mesh, registered_mesh_upside_down],
+
                     minimized: false,
+
+                    metrics: Metrics::default(),
                 },
                 event_loop,
             ))
@@ -1059,7 +1058,9 @@ impl Engine {
         Ok((setup_command_buffer, draw_command_buffer))
     }
 
-    pub fn render(&self) {
+    pub fn render(&mut self) {
+        self.metrics.start_frame();
+
         if !self.minimized {
             return;
         }
@@ -1144,27 +1145,6 @@ impl Engine {
                         );
                     }
 
-                    // device.cmd_bind_vertex_buffers(
-                    //     draw_command_buffer,
-                    //     0,
-                    //     &[self.registered_mesh.vertex_buffer],
-                    //     &[0],
-                    // );
-                    // device.cmd_bind_index_buffer(
-                    //     draw_command_buffer,
-                    //     self.registered_mesh.index_buffer,
-                    //     0,
-                    //     vk::IndexType::UINT32,
-                    // );
-                    // device.cmd_draw_indexed(
-                    //     draw_command_buffer,
-                    //     self.registered_mesh.mesh.indices.len() as u32,
-                    //     1,
-                    //     0,
-                    //     0,
-                    //     1,
-                    // );
-
                     // Or draw without the index buffer
                     // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
                     device.cmd_end_render_pass(draw_command_buffer);
@@ -1188,6 +1168,8 @@ impl Engine {
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
         }
+
+        self.metrics.end_frame();
     }
 
     pub fn start_update_thread(&self) -> JoinHandle<()> {
