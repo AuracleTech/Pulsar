@@ -346,54 +346,54 @@ impl Engine {
 
             let mut registered_meshes = Vec::new();
 
-            let mut vertices = Vec::new();
-            let mut indices = Vec::new();
+            for _ in 0..5 {
+                let mut vertices = Vec::new();
+                let mut indices = Vec::new();
+                for _ in 0..1_000 {
+                    let x = rng.gen_range(-1.0..1.0);
+                    let y = rng.gen_range(-1.0..1.0);
+                    let red = rng.gen_range(0.0..1.0);
+                    let green = rng.gen_range(0.0..1.0);
+                    let blue = rng.gen_range(0.0..1.0);
 
-            for _ in 0..1000 {
-                let x = rng.gen_range(-1.0..1.0);
-                let y = rng.gen_range(-1.0..1.0);
-                let red = rng.gen_range(0.0..1.0);
-                let green = rng.gen_range(0.0..1.0);
-                let blue = rng.gen_range(0.0..1.0);
+                    let v1 = Vertex {
+                        pos: [x, y, 1.0, 1.0],
+                        color: [red, green, blue, 1.0],
+                    };
+                    let v2 = Vertex {
+                        pos: [x + 0.1, y, 1.0, 1.0],
+                        color: [red, green, blue, 1.0],
+                    };
+                    let v3 = Vertex {
+                        pos: [x + 0.1, y - 0.1, 1.0, 1.0],
+                        color: [red, green, blue, 1.0],
+                    };
+                    let v4 = Vertex {
+                        pos: [x, y - 0.1, 1.0, 1.0],
+                        color: [red, green, blue, 1.0],
+                    };
 
-                let v1 = Vertex {
-                    pos: [x, y, 1.0, 1.0],
-                    color: [red, green, blue, 1.0],
-                };
-                let v2 = Vertex {
-                    pos: [x + 0.1, y, 1.0, 1.0],
-                    color: [red, green, blue, 1.0],
-                };
-                let v3 = Vertex {
-                    pos: [x + 0.1, y - 0.1, 1.0, 1.0],
-                    color: [red, green, blue, 1.0],
-                };
-                let v4 = Vertex {
-                    pos: [x, y - 0.1, 1.0, 1.0],
-                    color: [red, green, blue, 1.0],
-                };
+                    vertices.push(v1);
+                    vertices.push(v2);
+                    vertices.push(v3);
+                    vertices.push(v4);
 
-                vertices.push(v1);
-                vertices.push(v2);
-                vertices.push(v3);
-                vertices.push(v4);
+                    let offset = vertices.len() as u32 - 4;
+                    let quad_indices = vec![
+                        offset + 0,
+                        offset + 1,
+                        offset + 2,
+                        offset + 0,
+                        offset + 2,
+                        offset + 3,
+                    ];
 
-                let offset = vertices.len() as u32 - 4;
-                let quad_indices = vec![
-                    offset + 0,
-                    offset + 1,
-                    offset + 2,
-                    offset + 0,
-                    offset + 2,
-                    offset + 3,
-                ];
-
-                indices.extend(quad_indices);
+                    indices.extend(quad_indices);
+                }
+                let mesh = Mesh { vertices, indices };
+                let registered_mesh = mesh.register(&device, &device_memory_properties);
+                registered_meshes.push(registered_mesh);
             }
-
-            let mesh = Mesh { vertices, indices };
-            let registered_mesh = mesh.register(&device, &device_memory_properties);
-            registered_meshes.push(registered_mesh);
 
             // // SECTION CUBE
             // let cube = Mesh {
@@ -440,29 +440,29 @@ impl Engine {
             // registered_meshes.push(registered_cube);
 
             // SECTION SQUARE
-            let square = Mesh {
-                vertices: vec![
-                    Vertex {
-                        pos: [0.5, 0.5, 0.0, 1.0],
-                        color: [1.0, 0.0, 0.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [0.5, -0.5, 0.0, 1.0],
-                        color: [1.0, 1.0, 0.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [-0.5, -0.5, 0.0, 1.0],
-                        color: [0.0, 1.0, 0.0, 1.0],
-                    },
-                    Vertex {
-                        pos: [-0.5, 0.5, 0.0, 1.0],
-                        color: [0.0, 1.0, 1.0, 1.0],
-                    },
-                ],
-                indices: vec![0, 1, 2, 0, 2, 3],
-            };
-            let registered_square = square.register(&device, &device_memory_properties);
-            registered_meshes.push(registered_square);
+            // let square = Mesh {
+            //     vertices: vec![
+            //         Vertex {
+            //             pos: [0.5, 0.5, 0.0, 1.0],
+            //             color: [1.0, 0.0, 0.0, 1.0],
+            //         },
+            //         Vertex {
+            //             pos: [0.5, -0.5, 0.0, 1.0],
+            //             color: [1.0, 1.0, 0.0, 1.0],
+            //         },
+            //         Vertex {
+            //             pos: [-0.5, -0.5, 0.0, 1.0],
+            //             color: [0.0, 1.0, 0.0, 1.0],
+            //         },
+            //         Vertex {
+            //             pos: [-0.5, 0.5, 0.0, 1.0],
+            //             color: [0.0, 1.0, 1.0, 1.0],
+            //         },
+            //     ],
+            //     indices: vec![0, 1, 2, 0, 2, 3],
+            // };
+            // let registered_square = square.register(&device, &device_memory_properties);
+            // registered_meshes.push(registered_square);
 
             let swapchain_resources = SwapchainResources {
                 pool,
