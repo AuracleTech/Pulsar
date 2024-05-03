@@ -1,37 +1,40 @@
 use std::time::{Duration, Instant};
 
-const CYCLE_REPORT_INTERVAL: Duration = Duration::from_secs(1);
+const CYCLE_REPORT_INTERVAL: Duration = Duration::from_millis(1000);
 #[derive(Debug)]
 pub(crate) struct Metrics {
     engine_start: Instant,
     cycle_start: Instant,
-    frame_start: Instant,
+    frame_tick: Instant,
     slowest_render: Duration,
     fastest_render: Duration,
     total_render: Duration,
     total_frames: u32,
+    restart_frame_duration: Duration,
 }
 impl Default for Metrics {
     fn default() -> Self {
         Self {
             engine_start: Instant::now(),
             cycle_start: Instant::now(),
-            frame_start: Instant::now(),
+            frame_tick: Instant::now(),
             slowest_render: Duration::from_secs(0),
             fastest_render: Duration::from_secs(30),
             total_render: Duration::from_secs(0),
             total_frames: 0,
+            restart_frame_duration: Duration::from_secs(0),
         }
     }
 }
 impl Metrics {
     pub(crate) fn start_frame(&mut self) {
-        self.frame_start = Instant::now();
+        self.restart_frame_duration = self.frame_tick.elapsed();
+        self.frame_tick = Instant::now();
     }
 
     pub(crate) fn end_frame(&mut self) {
         self.total_frames += 1;
-        let elapsed_time = self.frame_start.elapsed();
+        let elapsed_time = self.frame_tick.elapsed();
         self.total_render += elapsed_time;
 
         if elapsed_time > self.slowest_render {
@@ -43,14 +46,18 @@ impl Metrics {
 
         if self.cycle_start.elapsed() > CYCLE_REPORT_INTERVAL {
             log::info!(
-                "Slowest {:?} Fastest {:?} Average {:?} Draw calls {}",
+                "Restart {:?} Slowest {:?} Fastest {:?} Average {:?} Draw {} / {:?}s",
+                self.restart_frame_duration,
                 self.slowest_render,
                 self.fastest_render,
                 self.total_render / self.total_frames,
-                self.total_frames
+                self.total_frames,
+                CYCLE_REPORT_INTERVAL.as_secs_f64()
             );
             *self = Self::default();
         }
+
+        self.frame_tick = Instant::now();
     }
 }
 
