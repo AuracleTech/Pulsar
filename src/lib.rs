@@ -650,27 +650,27 @@ impl Engine {
                     let x = rng.gen_range(-1.0..1.0);
                     let y = rng.gen_range(-1.0..1.0);
 
-                    let v1 = Vertex {
-                        pos: [x, y, 1.0, 1.0],
-                        uv: [0.0, 0.0],
-                    };
-                    let v2 = Vertex {
-                        pos: [x + 0.1, y, 1.0, 1.0],
-                        uv: [0.0, 1.0],
-                    };
-                    let v3 = Vertex {
-                        pos: [x + 0.1, y - 0.1, 1.0, 1.0],
-                        uv: [1.0, 1.0],
-                    };
-                    let v4 = Vertex {
-                        pos: [x, y - 0.1, 1.0, 1.0],
-                        uv: [1.0, 0.0],
-                    };
-
-                    vertices.push(v1);
-                    vertices.push(v2);
-                    vertices.push(v3);
-                    vertices.push(v4);
+                    vertices.extend(
+                        [
+                            Vertex {
+                                pos: [x, y, 1.0, 1.0],
+                                uv: [0.0, 0.0],
+                            },
+                            Vertex {
+                                pos: [x + 0.1, y, 1.0, 1.0],
+                                uv: [0.0, 1.0],
+                            },
+                            Vertex {
+                                pos: [x + 0.1, y - 0.1, 1.0, 1.0],
+                                uv: [1.0, 1.0],
+                            },
+                            Vertex {
+                                pos: [x, y - 0.1, 1.0, 1.0],
+                                uv: [1.0, 0.0],
+                            },
+                        ]
+                        .iter(),
+                    );
 
                     let offset = vertices.len() as u32 - 4;
                     let quad_indices = vec![
