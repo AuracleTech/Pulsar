@@ -753,7 +753,7 @@ impl Engine {
                         uv: [1.0, 0.0],
                     },
                 ],
-                indices: vec![0u32, 1, 2, 2, 3, 0], // FIX OG [0, 1, 2, 0, 2, 3],
+                indices: vec![0u32, 1, 2, 2, 3, 0],
             };
             let registered_square = square.register(&device, &device_memory_properties);
             registered_meshes.push(registered_square);
