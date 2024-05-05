@@ -643,95 +643,51 @@ impl Engine {
             // MARK: MESHES
             let mut registered_meshes = Vec::new();
 
-            // for _ in 0..5 {
-            //     let mut vertices = Vec::new();
-            //     let mut indices = Vec::new();
-            //     for _ in 0..1_000 {
-            //         let x = rng.gen_range(-1.0..1.0);
-            //         let y = rng.gen_range(-1.0..1.0);
+            for _ in 0..5 {
+                let mut vertices = Vec::new();
+                let mut indices = Vec::new();
+                for _ in 0..10 {
+                    let x = rng.gen_range(-1.0..1.0);
+                    let y = rng.gen_range(-1.0..1.0);
 
-            //         let v1 = Vertex {
-            //             pos: [x, y, 1.0, 1.0],
-            //             uv: [0.0, 0.0],
-            //         };
-            //         let v2 = Vertex {
-            //             pos: [x + 0.1, y, 1.0, 1.0],
-            //             uv: [0.0, 1.0],
-            //         };
-            //         let v3 = Vertex {
-            //             pos: [x + 0.1, y - 0.1, 1.0, 1.0],
-            //             uv: [1.0, 1.0],
-            //         };
-            //         let v4 = Vertex {
-            //             pos: [x, y - 0.1, 1.0, 1.0],
-            //             uv: [1.0, 0.0],
-            //         };
+                    let v1 = Vertex {
+                        pos: [x, y, 1.0, 1.0],
+                        uv: [0.0, 0.0],
+                    };
+                    let v2 = Vertex {
+                        pos: [x + 0.1, y, 1.0, 1.0],
+                        uv: [0.0, 1.0],
+                    };
+                    let v3 = Vertex {
+                        pos: [x + 0.1, y - 0.1, 1.0, 1.0],
+                        uv: [1.0, 1.0],
+                    };
+                    let v4 = Vertex {
+                        pos: [x, y - 0.1, 1.0, 1.0],
+                        uv: [1.0, 0.0],
+                    };
 
-            //         vertices.push(v1);
-            //         vertices.push(v2);
-            //         vertices.push(v3);
-            //         vertices.push(v4);
+                    vertices.push(v1);
+                    vertices.push(v2);
+                    vertices.push(v3);
+                    vertices.push(v4);
 
-            //         let offset = vertices.len() as u32 - 4;
-            //         let quad_indices = vec![
-            //             offset + 0,
-            //             offset + 1,
-            //             offset + 2,
-            //             offset + 0,
-            //             offset + 2,
-            //             offset + 3,
-            //         ];
+                    let offset = vertices.len() as u32 - 4;
+                    let quad_indices = vec![
+                        offset + 0,
+                        offset + 1,
+                        offset + 2,
+                        offset + 0,
+                        offset + 2,
+                        offset + 3,
+                    ];
 
-            //         indices.extend(quad_indices);
-            //     }
-            //     let mesh = Mesh { vertices, indices };
-            //     let registered_mesh = mesh.register(&device, &device_memory_properties);
-            //     registered_meshes.push(registered_mesh);
-            // }
-
-            // MARK: CUBE
-            // let cube = Mesh {
-            //     vertices: vec![
-            //         Vertex {
-            //             pos: [-1.0, -1.0, 0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [1.0, -1.0, 0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [-1.0, 1.0, 0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [1.0, 1.0, 0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [-1.0, -1.0, -0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [1.0, -1.0, -0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [-1.0, 1.0, -0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [1.0, 1.0, -0.5, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //     ],
-            //     indices: vec![
-            //         2, 6, 7, 2, 3, 7, 0, 4, 5, 0, 1, 5, 0, 2, 6, 0, 4, 6, 1, 3, 7, 1, 5, 7, 0, 2,
-            //         3, 0, 1, 3, 4, 6, 7, 4, 5, 7,
-            //     ],
-            // };
-            // let registered_cube = cube.register(&device, &device_memory_properties);
-            // registered_meshes.push(registered_cube);
+                    indices.extend(quad_indices);
+                }
+                let mesh = Mesh { vertices, indices };
+                let registered_mesh = mesh.register(&device, &device_memory_properties);
+                registered_meshes.push(registered_mesh);
+            }
 
             // MARK: SQUARE
             let square = Mesh {
