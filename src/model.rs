@@ -6,7 +6,7 @@ use crate::find_memorytype_index;
 #[derive(Clone, Debug, Copy)]
 pub struct Vertex {
     pub pos: [f32; 4],
-    pub color: [f32; 4], // TODO remove
+    pub uv: [f32; 2],
 }
 
 #[derive(Debug)]
@@ -33,7 +33,6 @@ impl Mesh {
         unsafe {
             let index_buffer_info = vk::BufferCreateInfo::default()
                 .size((self.indices.len() * mem::size_of::<u32>()) as u64)
-                // .size(mem::size_of_val(&self.indices) as u64) // TEST
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER)
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 

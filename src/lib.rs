@@ -6,6 +6,7 @@ mod shaders;
 use ash::{
     ext::debug_utils,
     khr::{surface, swapchain},
+    util::Align,
     vk, Device, Entry, Instance,
 };
 use log::debug;
@@ -26,6 +27,14 @@ use winit::{
 
 const APP_NAME: &str = "Nhope Engine";
 const APP_VERSION: &str = "0.1.0";
+
+#[derive(Clone, Debug, Copy)]
+pub struct Vector3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub _pad: f32,
+}
 
 #[macro_export]
 macro_rules! offset_of {
@@ -200,6 +209,18 @@ pub struct Engine {
     vertex_shader_module: vk::ShaderModule,
     fragment_shader_module: vk::ShaderModule,
 
+    descriptor_sets: Vec<vk::DescriptorSet>,
+    desc_set_layouts: [vk::DescriptorSetLayout; 1],
+    image_buffer_memory: vk::DeviceMemory,
+    image_buffer: vk::Buffer,
+    texture_memory: vk::DeviceMemory,
+    tex_image_view: vk::ImageView,
+    texture_image: vk::Image,
+    uniform_color_buffer: vk::Buffer,
+    uniform_color_buffer_memory: vk::DeviceMemory,
+    descriptor_pool: vk::DescriptorPool,
+    texture_sampler: vk::Sampler,
+
     registered_meshes: Vec<RegisteredMesh>,
 
     minimized: bool,
@@ -285,6 +306,52 @@ impl Engine {
 
             let renderpass = Engine::create_renderpass(&surface, &device)?;
 
+            // MARK: DESCRIPTOR SET
+            let descriptor_sizes = [
+                vk::DescriptorPoolSize {
+                    ty: vk::DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: 1,
+                },
+                vk::DescriptorPoolSize {
+                    ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                },
+            ];
+            let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
+                .pool_sizes(&descriptor_sizes)
+                .max_sets(1);
+
+            let descriptor_pool = device
+                .create_descriptor_pool(&descriptor_pool_info, None)
+                .unwrap();
+            let desc_layout_bindings = [
+                vk::DescriptorSetLayoutBinding {
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
+                },
+                vk::DescriptorSetLayoutBinding {
+                    binding: 1,
+                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    descriptor_count: 1,
+                    stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                    ..Default::default()
+                },
+            ];
+            let descriptor_info =
+                vk::DescriptorSetLayoutCreateInfo::default().bindings(&desc_layout_bindings);
+
+            let desc_set_layouts = [device
+                .create_descriptor_set_layout(&descriptor_info, None)
+                .unwrap()];
+
+            let desc_alloc_info = vk::DescriptorSetAllocateInfo::default()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(&desc_set_layouts);
+            let descriptor_sets = device.allocate_descriptor_sets(&desc_alloc_info).unwrap();
+            // MARK: END DESCRIPTOR SET
+
             let (
                 graphic_pipeline,
                 viewports,
@@ -293,7 +360,7 @@ impl Engine {
                 pipeline_layout,
                 vertex_shader_module,
                 fragment_shader_module,
-            ) = Engine::create_pipeline(&device, &surface, renderpass)?;
+            ) = Engine::create_pipeline(&device, &surface, renderpass, desc_set_layouts)?;
 
             let framebuffers = Engine::create_framebuffers(
                 &device,
@@ -344,58 +411,285 @@ impl Engine {
                 },
             );
 
+            // MARK: UNIFORM BUFFER
+            let (uniform_color_buffer, uniform_color_buffer_memory, uniform_color_buffer_data) =
+                Engine::create_uniform_buffer(&device, &device_memory_properties);
+
+            // MARK: IMAGE
+            let image = image::load_from_memory(include_bytes!("../assets/img/picture.png"))
+                .unwrap()
+                .to_rgba8();
+            let (width, height) = image.dimensions();
+            let image_extent = vk::Extent2D { width, height };
+            let image_data = image.into_raw();
+            let image_buffer_info = vk::BufferCreateInfo {
+                size: (mem::size_of::<u8>() * image_data.len()) as u64,
+                usage: vk::BufferUsageFlags::TRANSFER_SRC,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                ..Default::default()
+            };
+            let image_buffer = device.create_buffer(&image_buffer_info, None).unwrap();
+            let image_buffer_memory_req = device.get_buffer_memory_requirements(image_buffer);
+            let image_buffer_memory_index = find_memorytype_index(
+                &image_buffer_memory_req,
+                &device_memory_properties,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            )
+            .expect("Unable to find suitable memorytype for the image buffer.");
+
+            let image_buffer_allocate_info = vk::MemoryAllocateInfo {
+                allocation_size: image_buffer_memory_req.size,
+                memory_type_index: image_buffer_memory_index,
+                ..Default::default()
+            };
+            let image_buffer_memory = device
+                .allocate_memory(&image_buffer_allocate_info, None)
+                .unwrap();
+            let image_ptr = device
+                .map_memory(
+                    image_buffer_memory,
+                    0,
+                    image_buffer_memory_req.size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap();
+            let mut image_slice = Align::new(
+                image_ptr,
+                mem::align_of::<u8>() as u64,
+                image_buffer_memory_req.size,
+            );
+            image_slice.copy_from_slice(&image_data);
+            device.unmap_memory(image_buffer_memory);
+            device
+                .bind_buffer_memory(image_buffer, image_buffer_memory, 0)
+                .unwrap();
+
+            // MARK: TEXTURE
+            let texture_create_info = vk::ImageCreateInfo {
+                image_type: vk::ImageType::TYPE_2D,
+                format: vk::Format::R8G8B8A8_UNORM,
+                extent: image_extent.into(),
+                mip_levels: 1,
+                array_layers: 1,
+                samples: vk::SampleCountFlags::TYPE_1,
+                tiling: vk::ImageTiling::OPTIMAL,
+                usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+                sharing_mode: vk::SharingMode::EXCLUSIVE,
+                ..Default::default()
+            };
+            let texture_image = device.create_image(&texture_create_info, None).unwrap();
+            let texture_memory_req = device.get_image_memory_requirements(texture_image);
+            let texture_memory_index = find_memorytype_index(
+                &texture_memory_req,
+                &device_memory_properties,
+                vk::MemoryPropertyFlags::DEVICE_LOCAL,
+            )
+            .expect("Unable to find suitable memory index for depth image.");
+
+            let texture_allocate_info = vk::MemoryAllocateInfo {
+                allocation_size: texture_memory_req.size,
+                memory_type_index: texture_memory_index,
+                ..Default::default()
+            };
+            let texture_memory = device
+                .allocate_memory(&texture_allocate_info, None)
+                .unwrap();
+            device
+                .bind_image_memory(texture_image, texture_memory, 0)
+                .expect("Unable to bind depth image memory");
+
+            // MARK: REC TEXTURE
+            record_submit_commandbuffer(
+                &device,
+                setup_command_buffer,
+                setup_commands_reuse_fence,
+                swapchain.present_queue,
+                &[],
+                &[],
+                &[],
+                |device, texture_command_buffer| {
+                    let texture_barrier = vk::ImageMemoryBarrier {
+                        dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+                        new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        image: texture_image,
+                        subresource_range: vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            level_count: 1,
+                            layer_count: 1,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    };
+                    device.cmd_pipeline_barrier(
+                        texture_command_buffer,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[texture_barrier],
+                    );
+                    let buffer_copy_regions = vk::BufferImageCopy::default()
+                        .image_subresource(
+                            vk::ImageSubresourceLayers::default()
+                                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                .layer_count(1),
+                        )
+                        .image_extent(image_extent.into());
+
+                    device.cmd_copy_buffer_to_image(
+                        texture_command_buffer,
+                        image_buffer,
+                        texture_image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        &[buffer_copy_regions],
+                    );
+                    let texture_barrier_end = vk::ImageMemoryBarrier {
+                        src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+                        dst_access_mask: vk::AccessFlags::SHADER_READ,
+                        old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                        image: texture_image,
+                        subresource_range: vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            level_count: 1,
+                            layer_count: 1,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    };
+                    device.cmd_pipeline_barrier(
+                        texture_command_buffer,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::PipelineStageFlags::FRAGMENT_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[texture_barrier_end],
+                    );
+                },
+            );
+
+            // MARK: SAMPLER
+            let sampler_info = vk::SamplerCreateInfo {
+                mag_filter: vk::Filter::LINEAR,
+                min_filter: vk::Filter::LINEAR,
+                mipmap_mode: vk::SamplerMipmapMode::LINEAR,
+                address_mode_u: vk::SamplerAddressMode::MIRRORED_REPEAT,
+                address_mode_v: vk::SamplerAddressMode::MIRRORED_REPEAT,
+                address_mode_w: vk::SamplerAddressMode::MIRRORED_REPEAT,
+                max_anisotropy: 1.0,
+                border_color: vk::BorderColor::FLOAT_OPAQUE_WHITE,
+                compare_op: vk::CompareOp::NEVER,
+                ..Default::default()
+            };
+
+            let texture_sampler = device.create_sampler(&sampler_info, None).unwrap();
+
+            // MARK: TEXTURE VIEW
+            let tex_image_view_info = vk::ImageViewCreateInfo {
+                view_type: vk::ImageViewType::TYPE_2D,
+                format: texture_create_info.format,
+                components: vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::R,
+                    g: vk::ComponentSwizzle::G,
+                    b: vk::ComponentSwizzle::B,
+                    a: vk::ComponentSwizzle::A,
+                },
+                subresource_range: vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    level_count: 1,
+                    layer_count: 1,
+                    ..Default::default()
+                },
+                image: texture_image,
+                ..Default::default()
+            };
+            let tex_image_view = device
+                .create_image_view(&tex_image_view_info, None)
+                .unwrap();
+
+            let uniform_color_buffer_descriptor = vk::DescriptorBufferInfo {
+                buffer: uniform_color_buffer,
+                offset: 0,
+                range: mem::size_of_val(&uniform_color_buffer_data) as u64,
+            };
+
+            let tex_descriptor = vk::DescriptorImageInfo {
+                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                image_view: tex_image_view,
+                sampler: texture_sampler,
+            };
+
+            let write_desc_sets = [
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_sets[0],
+                    descriptor_count: 1,
+                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                    p_buffer_info: &uniform_color_buffer_descriptor,
+                    ..Default::default()
+                },
+                vk::WriteDescriptorSet {
+                    dst_set: descriptor_sets[0],
+                    dst_binding: 1,
+                    descriptor_count: 1,
+                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                    p_image_info: &tex_descriptor,
+                    ..Default::default()
+                },
+            ];
+            device.update_descriptor_sets(&write_desc_sets, &[]);
+
+            // MARK: MESHES
             let mut registered_meshes = Vec::new();
 
-            for _ in 0..5 {
-                let mut vertices = Vec::new();
-                let mut indices = Vec::new();
-                for _ in 0..1_000 {
-                    let x = rng.gen_range(-1.0..1.0);
-                    let y = rng.gen_range(-1.0..1.0);
-                    let red = rng.gen_range(0.0..1.0);
-                    let green = rng.gen_range(0.0..1.0);
-                    let blue = rng.gen_range(0.0..1.0);
+            // for _ in 0..5 {
+            //     let mut vertices = Vec::new();
+            //     let mut indices = Vec::new();
+            //     for _ in 0..1_000 {
+            //         let x = rng.gen_range(-1.0..1.0);
+            //         let y = rng.gen_range(-1.0..1.0);
 
-                    let v1 = Vertex {
-                        pos: [x, y, 1.0, 1.0],
-                        color: [red, green, blue, 1.0],
-                    };
-                    let v2 = Vertex {
-                        pos: [x + 0.1, y, 1.0, 1.0],
-                        color: [red, green, blue, 1.0],
-                    };
-                    let v3 = Vertex {
-                        pos: [x + 0.1, y - 0.1, 1.0, 1.0],
-                        color: [red, green, blue, 1.0],
-                    };
-                    let v4 = Vertex {
-                        pos: [x, y - 0.1, 1.0, 1.0],
-                        color: [red, green, blue, 1.0],
-                    };
+            //         let v1 = Vertex {
+            //             pos: [x, y, 1.0, 1.0],
+            //             uv: [0.0, 0.0],
+            //         };
+            //         let v2 = Vertex {
+            //             pos: [x + 0.1, y, 1.0, 1.0],
+            //             uv: [0.0, 1.0],
+            //         };
+            //         let v3 = Vertex {
+            //             pos: [x + 0.1, y - 0.1, 1.0, 1.0],
+            //             uv: [1.0, 1.0],
+            //         };
+            //         let v4 = Vertex {
+            //             pos: [x, y - 0.1, 1.0, 1.0],
+            //             uv: [1.0, 0.0],
+            //         };
 
-                    vertices.push(v1);
-                    vertices.push(v2);
-                    vertices.push(v3);
-                    vertices.push(v4);
+            //         vertices.push(v1);
+            //         vertices.push(v2);
+            //         vertices.push(v3);
+            //         vertices.push(v4);
 
-                    let offset = vertices.len() as u32 - 4;
-                    let quad_indices = vec![
-                        offset + 0,
-                        offset + 1,
-                        offset + 2,
-                        offset + 0,
-                        offset + 2,
-                        offset + 3,
-                    ];
+            //         let offset = vertices.len() as u32 - 4;
+            //         let quad_indices = vec![
+            //             offset + 0,
+            //             offset + 1,
+            //             offset + 2,
+            //             offset + 0,
+            //             offset + 2,
+            //             offset + 3,
+            //         ];
 
-                    indices.extend(quad_indices);
-                }
-                let mesh = Mesh { vertices, indices };
-                let registered_mesh = mesh.register(&device, &device_memory_properties);
-                registered_meshes.push(registered_mesh);
-            }
+            //         indices.extend(quad_indices);
+            //     }
+            //     let mesh = Mesh { vertices, indices };
+            //     let registered_mesh = mesh.register(&device, &device_memory_properties);
+            //     registered_meshes.push(registered_mesh);
+            // }
 
-            // // SECTION CUBE
+            // MARK: CUBE
             // let cube = Mesh {
             //     vertices: vec![
             //         Vertex {
@@ -439,30 +733,30 @@ impl Engine {
             // let registered_cube = cube.register(&device, &device_memory_properties);
             // registered_meshes.push(registered_cube);
 
-            // SECTION SQUARE
-            // let square = Mesh {
-            //     vertices: vec![
-            //         Vertex {
-            //             pos: [0.5, 0.5, 0.0, 1.0],
-            //             color: [1.0, 0.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [0.5, -0.5, 0.0, 1.0],
-            //             color: [1.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [-0.5, -0.5, 0.0, 1.0],
-            //             color: [0.0, 1.0, 0.0, 1.0],
-            //         },
-            //         Vertex {
-            //             pos: [-0.5, 0.5, 0.0, 1.0],
-            //             color: [0.0, 1.0, 1.0, 1.0],
-            //         },
-            //     ],
-            //     indices: vec![0, 1, 2, 0, 2, 3],
-            // };
-            // let registered_square = square.register(&device, &device_memory_properties);
-            // registered_meshes.push(registered_square);
+            // MARK: SQUARE
+            let square = Mesh {
+                vertices: vec![
+                    Vertex {
+                        pos: [-1.0, -1.0, 0.0, 1.0],
+                        uv: [0.0, 0.0],
+                    },
+                    Vertex {
+                        pos: [-1.0, 1.0, 0.0, 1.0],
+                        uv: [0.0, 1.0],
+                    },
+                    Vertex {
+                        pos: [1.0, 1.0, 0.0, 1.0],
+                        uv: [1.0, 1.0],
+                    },
+                    Vertex {
+                        pos: [1.0, -1.0, 0.0, 1.0],
+                        uv: [1.0, 0.0],
+                    },
+                ],
+                indices: vec![0u32, 1, 2, 2, 3, 0], // FIX OG [0, 1, 2, 0, 2, 3],
+            };
+            let registered_square = square.register(&device, &device_memory_properties);
+            registered_meshes.push(registered_square);
 
             let swapchain_resources = SwapchainResources {
                 pool,
@@ -515,6 +809,18 @@ impl Engine {
                     pipeline_layout,
                     vertex_shader_module,
                     fragment_shader_module,
+
+                    descriptor_sets,
+                    desc_set_layouts,
+                    image_buffer_memory,
+                    image_buffer,
+                    texture_memory,
+                    tex_image_view,
+                    texture_image,
+                    uniform_color_buffer,
+                    uniform_color_buffer_memory,
+                    descriptor_pool,
+                    texture_sampler,
 
                     registered_meshes,
 
@@ -949,6 +1255,7 @@ impl Engine {
         device: &Device,
         surface: &EngineSurface,
         renderpass: vk::RenderPass,
+        desc_set_layouts: [vk::DescriptorSetLayout; 1],
     ) -> Result<
         (
             vk::Pipeline,
@@ -969,7 +1276,8 @@ impl Engine {
             frag_shader.pipeline_shader_stage_create_info,
         ];
 
-        let layout_create_info = vk::PipelineLayoutCreateInfo::default();
+        let layout_create_info =
+            vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
         let pipeline_layout = device
             .create_pipeline_layout(&layout_create_info, None)
             .unwrap();
@@ -989,8 +1297,8 @@ impl Engine {
             vk::VertexInputAttributeDescription {
                 location: 1,
                 binding: 0,
-                format: vk::Format::R32G32B32A32_SFLOAT,
-                offset: offset_of!(Vertex, color) as u32,
+                format: vk::Format::R32G32_SFLOAT,
+                offset: offset_of!(Vertex, uv) as u32,
             },
         ];
 
@@ -1021,10 +1329,8 @@ impl Engine {
             polygon_mode: vk::PolygonMode::FILL,
             ..Default::default()
         };
-        let multisample_state_info = vk::PipelineMultisampleStateCreateInfo {
-            rasterization_samples: vk::SampleCountFlags::TYPE_1,
-            ..Default::default()
-        };
+        let multisample_state_info = vk::PipelineMultisampleStateCreateInfo::default()
+            .rasterization_samples(vk::SampleCountFlags::TYPE_1);
         let noop_stencil_state = vk::StencilOpState {
             fail_op: vk::StencilOp::KEEP,
             pass_op: vk::StencilOp::KEEP,
@@ -1194,7 +1500,7 @@ impl Engine {
                 self.swapchain_resources.draw_command_buffer,
                 self.swapchain_resources.draw_commands_reuse_fence,
                 self.swapchain.present_queue,
-                &[vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT],
+                &[vk::PipelineStageFlags::BOTTOM_OF_PIPE],
                 &[self.swapchain_resources.present_complete_semaphore],
                 &[self.swapchain_resources.rendering_complete_semaphore],
                 |device, draw_command_buffer| {
@@ -1202,6 +1508,14 @@ impl Engine {
                         draw_command_buffer,
                         &render_pass_begin_info,
                         vk::SubpassContents::INLINE,
+                    );
+                    device.cmd_bind_descriptor_sets(
+                        draw_command_buffer,
+                        vk::PipelineBindPoint::GRAPHICS,
+                        self.pipeline_layout,
+                        0,
+                        &self.descriptor_sets,
+                        &[],
                     );
                     device.cmd_bind_pipeline(
                         draw_command_buffer,
@@ -1243,10 +1557,9 @@ impl Engine {
             let swapchains = [self.swapchain.swapchain_khr];
             let image_indices = [present_index];
             let present_info = vk::PresentInfoKHR::default()
-                .wait_semaphores(&wait_semaphors) // &self.rendering_complete_semaphore)
+                .wait_semaphores(&wait_semaphors)
                 .swapchains(&swapchains)
                 .image_indices(&image_indices);
-
             let queue_present_result = self
                 .swapchain_loader
                 .queue_present(self.swapchain.present_queue, &present_info);
@@ -1403,6 +1716,68 @@ impl Engine {
         }
     }
 
+    unsafe fn create_uniform_buffer(
+        device: &Device,
+        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
+    ) -> (vk::Buffer, vk::DeviceMemory, Vector3) {
+        let uniform_color_buffer_data = Vector3 {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+            _pad: 0.0,
+        };
+        let uniform_color_buffer_info = vk::BufferCreateInfo {
+            size: mem::size_of_val(&uniform_color_buffer_data) as u64,
+            usage: vk::BufferUsageFlags::UNIFORM_BUFFER,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        let uniform_color_buffer = device
+            .create_buffer(&uniform_color_buffer_info, None)
+            .unwrap();
+        let uniform_color_buffer_memory_req =
+            device.get_buffer_memory_requirements(uniform_color_buffer);
+        let uniform_color_buffer_memory_index = find_memorytype_index(
+            &uniform_color_buffer_memory_req,
+            &device_memory_properties,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )
+        .expect("Unable to find suitable memorytype for the vertex buffer.");
+
+        let uniform_color_buffer_allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: uniform_color_buffer_memory_req.size,
+            memory_type_index: uniform_color_buffer_memory_index,
+            ..Default::default()
+        };
+        let uniform_color_buffer_memory = device
+            .allocate_memory(&uniform_color_buffer_allocate_info, None)
+            .unwrap();
+        let uniform_ptr = device
+            .map_memory(
+                uniform_color_buffer_memory,
+                0,
+                uniform_color_buffer_memory_req.size,
+                vk::MemoryMapFlags::empty(),
+            )
+            .unwrap();
+        let mut uniform_aligned_slice = Align::new(
+            uniform_ptr,
+            mem::align_of::<Vector3>() as u64,
+            uniform_color_buffer_memory_req.size,
+        );
+        uniform_aligned_slice.copy_from_slice(&[uniform_color_buffer_data]);
+        device.unmap_memory(uniform_color_buffer_memory);
+        device
+            .bind_buffer_memory(uniform_color_buffer, uniform_color_buffer_memory, 0)
+            .unwrap();
+
+        (
+            uniform_color_buffer,
+            uniform_color_buffer_memory,
+            uniform_color_buffer_data,
+        )
+    }
+
     unsafe fn destroy_swapchain(&mut self) {
         for &framebuffer in self.framebuffers.iter() {
             self.device.destroy_framebuffer(framebuffer, None);
@@ -1432,6 +1807,12 @@ impl Drop for Engine {
             self.device
                 .destroy_shader_module(self.fragment_shader_module, None);
 
+            self.device.free_memory(self.image_buffer_memory, None);
+            self.device.destroy_buffer(self.image_buffer, None);
+            self.device.free_memory(self.texture_memory, None);
+            self.device.destroy_image_view(self.tex_image_view, None);
+            self.device.destroy_image(self.texture_image, None);
+
             for registered_mesh in self.registered_meshes.iter() {
                 self.device
                     .free_memory(registered_mesh.index_buffer_memory, None);
@@ -1442,6 +1823,18 @@ impl Drop for Engine {
                 self.device
                     .destroy_buffer(registered_mesh.vertex_buffer, None);
             }
+
+            for &descriptor_set_layout in self.desc_set_layouts.iter() {
+                self.device
+                    .destroy_descriptor_set_layout(descriptor_set_layout, None);
+            }
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device.destroy_sampler(self.texture_sampler, None);
+
+            self.device
+                .free_memory(self.uniform_color_buffer_memory, None);
+            self.device.destroy_buffer(self.uniform_color_buffer, None);
 
             self.destroy_swapchain();
 
