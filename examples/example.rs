@@ -26,8 +26,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         },
                     ..
                 } => elwt.exit(),
+                WindowEvent::Occluded(_) => {} // TODO
                 WindowEvent::Resized(size) => engine.recreate_swapchain(size),
-                _ => (),
+                _ => {}
             },
             Event::AboutToWait => engine.render(),
             _ => (),
