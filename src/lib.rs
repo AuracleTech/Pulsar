@@ -47,6 +47,7 @@ macro_rules! offset_of {
         }
     }};
 }
+
 /// Helper function for submitting command buffers. Immediately waits for the fence before the command buffer
 /// is executed. That way we can delay the waiting for the fences by 1 frame which is good for performance.
 /// Make sure to create the fence in a signaled state on the first use.
@@ -178,6 +179,8 @@ struct SwapchainResources {
 }
 
 pub struct Engine {
+    rng: rand::rngs::ThreadRng,
+
     window: winit::window::Window,
     entry: Entry,
 
@@ -218,16 +221,17 @@ pub struct Engine {
     tex_image_view: vk::ImageView,
     texture_image: vk::Image,
     uniform_color_buffer: vk::Buffer,
-    uniform_color_buffer_memory: vk::DeviceMemory,
+    uniform_buffer_memory: vk::DeviceMemory,
     descriptor_pool: vk::DescriptorPool,
     texture_sampler: vk::Sampler,
 
     registered_meshes: Vec<RegisteredMesh>,
 
     minimized: bool,
+
     metrics: Metrics,
 
-    rng: rand::rngs::ThreadRng,
+    uniform: Mat4,
 }
 
 impl Engine {
@@ -413,8 +417,12 @@ impl Engine {
             );
 
             // MARK: UNIFORM BUFFER
-            let (uniform_color_buffer, uniform_color_buffer_memory, uniform_color_buffer_data) =
-                Engine::create_uniform_buffer(&device, &device_memory_properties);
+            let mut uniform = Mat4::IDENTITY;
+            // TEMP: rotate UBO transfrom
+            uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
+
+            let (uniform_color_buffer, uniform_color_buffer_memory) =
+                Engine::create_uniform_buffer(&device, &device_memory_properties, uniform);
 
             // MARK: IMAGE
             let image = image::load_from_memory(include_bytes!("../assets/img/picture.png"))
@@ -613,7 +621,7 @@ impl Engine {
             let uniform_color_buffer_descriptor = vk::DescriptorBufferInfo {
                 buffer: uniform_color_buffer,
                 offset: 0,
-                range: mem::size_of_val(&uniform_color_buffer_data) as u64,
+                range: mem::size_of_val(&uniform) as u64,
             };
 
             let tex_descriptor = vk::DescriptorImageInfo {
@@ -775,7 +783,7 @@ impl Engine {
                     tex_image_view,
                     texture_image,
                     uniform_color_buffer,
-                    uniform_color_buffer_memory,
+                    uniform_buffer_memory: uniform_color_buffer_memory,
                     descriptor_pool,
                     texture_sampler,
 
@@ -784,6 +792,8 @@ impl Engine {
                     minimized: false,
 
                     metrics: Metrics::default(),
+
+                    uniform,
                 },
                 event_loop,
             ))
@@ -1413,74 +1423,90 @@ impl Engine {
     unsafe fn create_uniform_buffer(
         device: &Device,
         device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
-    ) -> (vk::Buffer, vk::DeviceMemory, Mat4) {
-        let mut uniform_transform_buffer_data = Mat4::IDENTITY;
-
-        // TEMP: rotate UBO transfrom
-        uniform_transform_buffer_data =
-            Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0)
-                * uniform_transform_buffer_data;
-
-        let uniform_transform_buffer_info = vk::BufferCreateInfo {
-            size: mem::size_of_val(&uniform_transform_buffer_data) as u64,
+        uniform: Mat4,
+    ) -> (vk::Buffer, vk::DeviceMemory) {
+        let uniform_buffer_info = vk::BufferCreateInfo {
+            size: mem::size_of_val(&uniform) as u64,
             usage: vk::BufferUsageFlags::UNIFORM_BUFFER,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             ..Default::default()
         };
-        let uniform_transform_buffer = device
-            .create_buffer(&uniform_transform_buffer_info, None)
-            .unwrap();
-        let uniform_transform_buffer_memory_req =
-            device.get_buffer_memory_requirements(uniform_transform_buffer);
-        let uniform_transform_buffer_memory_index = find_memorytype_index(
-            &uniform_transform_buffer_memory_req,
+        let uniform_buffer = device.create_buffer(&uniform_buffer_info, None).unwrap();
+        let uniform_buffer_memory_req = device.get_buffer_memory_requirements(uniform_buffer);
+        let uniform_buffer_memory_index = find_memorytype_index(
+            &uniform_buffer_memory_req,
             &device_memory_properties,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )
         .expect("Unable to find suitable memorytype for the vertex buffer.");
 
-        let uniform_transform_buffer_allocate_info = vk::MemoryAllocateInfo {
-            allocation_size: uniform_transform_buffer_memory_req.size,
-            memory_type_index: uniform_transform_buffer_memory_index,
+        let uniform_buffer_allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: uniform_buffer_memory_req.size,
+            memory_type_index: uniform_buffer_memory_index,
             ..Default::default()
         };
-        let uniform_transform_buffer_memory = device
-            .allocate_memory(&uniform_transform_buffer_allocate_info, None)
+        let uniform_buffer_memory = device
+            .allocate_memory(&uniform_buffer_allocate_info, None)
             .unwrap();
         let uniform_ptr = device
             .map_memory(
-                uniform_transform_buffer_memory,
+                uniform_buffer_memory,
                 0,
-                uniform_transform_buffer_memory_req.size,
+                uniform_buffer_memory_req.size,
                 vk::MemoryMapFlags::empty(),
             )
             .unwrap();
         let mut uniform_aligned_slice = Align::new(
             uniform_ptr,
             mem::align_of::<Mat4>() as u64,
-            uniform_transform_buffer_memory_req.size,
+            uniform_buffer_memory_req.size,
         );
-        uniform_aligned_slice.copy_from_slice(&[uniform_transform_buffer_data]);
-        device.unmap_memory(uniform_transform_buffer_memory);
+        uniform_aligned_slice.copy_from_slice(&[uniform]);
+        device.unmap_memory(uniform_buffer_memory);
         device
-            .bind_buffer_memory(uniform_transform_buffer, uniform_transform_buffer_memory, 0)
+            .bind_buffer_memory(uniform_buffer, uniform_buffer_memory, 0)
             .unwrap();
 
-        (
-            uniform_transform_buffer,
-            uniform_transform_buffer_memory,
-            uniform_transform_buffer_data,
-        )
+        (uniform_buffer, uniform_buffer_memory)
+    }
+
+    unsafe fn update_uniform_buffer(
+        device: &Device,
+        uniform_buffer_memory: vk::DeviceMemory,
+        new_transform: Mat4,
+    ) {
+        let uniform_ptr = device
+            .map_memory(
+                uniform_buffer_memory,
+                0,
+                mem::size_of::<Mat4>() as u64,
+                vk::MemoryMapFlags::empty(),
+            )
+            .unwrap();
+
+        let mut uniform_aligned_slice = Align::new(
+            uniform_ptr,
+            mem::align_of::<Mat4>() as u64,
+            mem::size_of::<Mat4>() as u64,
+        );
+
+        uniform_aligned_slice.copy_from_slice(&[new_transform]);
+        device.unmap_memory(uniform_buffer_memory);
     }
 
     pub fn render(&mut self) {
         self.metrics.start_frame();
+        let delta = self.metrics.delta_start_to_start;
 
         if !self.minimized {
             return;
         }
 
+        self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
+
         unsafe {
+            Engine::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
+
             let result = self.swapchain_loader.acquire_next_image(
                 self.swapchain.swapchain_khr,
                 u64::MAX,
@@ -1790,8 +1816,7 @@ impl Drop for Engine {
                 .destroy_descriptor_pool(self.descriptor_pool, None);
             self.device.destroy_sampler(self.texture_sampler, None);
 
-            self.device
-                .free_memory(self.uniform_color_buffer_memory, None);
+            self.device.free_memory(self.uniform_buffer_memory, None);
             self.device.destroy_buffer(self.uniform_color_buffer, None);
 
             self.destroy_swapchain();
