@@ -9,7 +9,7 @@ use ash::{
     util::Align,
     vk, Device, Entry, Instance,
 };
-use glam::Vec4;
+use glam::{Mat4, Vec4};
 use log::debug;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
@@ -329,7 +329,7 @@ impl Engine {
                 vk::DescriptorSetLayoutBinding {
                     descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
                     descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                    stage_flags: vk::ShaderStageFlags::VERTEX,
                     ..Default::default()
                 },
                 vk::DescriptorSetLayoutBinding {
@@ -1413,57 +1413,63 @@ impl Engine {
     unsafe fn create_uniform_buffer(
         device: &Device,
         device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
-    ) -> (vk::Buffer, vk::DeviceMemory, Vec4) {
-        let uniform_color_buffer_data = Vec4::new(1.0, 0.0, 0.0, 0.0);
-        let uniform_color_buffer_info = vk::BufferCreateInfo {
-            size: mem::size_of_val(&uniform_color_buffer_data) as u64,
+    ) -> (vk::Buffer, vk::DeviceMemory, Mat4) {
+        let mut uniform_transform_buffer_data = Mat4::IDENTITY;
+
+        // TEMP: rotate UBO transfrom
+        uniform_transform_buffer_data =
+            Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0)
+                * uniform_transform_buffer_data;
+
+        let uniform_transform_buffer_info = vk::BufferCreateInfo {
+            size: mem::size_of_val(&uniform_transform_buffer_data) as u64,
             usage: vk::BufferUsageFlags::UNIFORM_BUFFER,
             sharing_mode: vk::SharingMode::EXCLUSIVE,
             ..Default::default()
         };
-        let uniform_color_buffer = device
-            .create_buffer(&uniform_color_buffer_info, None)
+        let uniform_transform_buffer = device
+            .create_buffer(&uniform_transform_buffer_info, None)
             .unwrap();
-        let uniform_color_buffer_memory_req =
-            device.get_buffer_memory_requirements(uniform_color_buffer);
-        let uniform_color_buffer_memory_index = find_memorytype_index(
-            &uniform_color_buffer_memory_req,
+        let uniform_transform_buffer_memory_req =
+            device.get_buffer_memory_requirements(uniform_transform_buffer);
+        let uniform_transform_buffer_memory_index = find_memorytype_index(
+            &uniform_transform_buffer_memory_req,
             &device_memory_properties,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )
         .expect("Unable to find suitable memorytype for the vertex buffer.");
 
-        let uniform_color_buffer_allocate_info = vk::MemoryAllocateInfo {
-            allocation_size: uniform_color_buffer_memory_req.size,
-            memory_type_index: uniform_color_buffer_memory_index,
+        let uniform_transform_buffer_allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: uniform_transform_buffer_memory_req.size,
+            memory_type_index: uniform_transform_buffer_memory_index,
             ..Default::default()
         };
-        let uniform_color_buffer_memory = device
-            .allocate_memory(&uniform_color_buffer_allocate_info, None)
+        let uniform_transform_buffer_memory = device
+            .allocate_memory(&uniform_transform_buffer_allocate_info, None)
             .unwrap();
         let uniform_ptr = device
             .map_memory(
-                uniform_color_buffer_memory,
+                uniform_transform_buffer_memory,
                 0,
-                uniform_color_buffer_memory_req.size,
+                uniform_transform_buffer_memory_req.size,
                 vk::MemoryMapFlags::empty(),
             )
             .unwrap();
         let mut uniform_aligned_slice = Align::new(
             uniform_ptr,
-            mem::align_of::<Vector3>() as u64,
-            uniform_color_buffer_memory_req.size,
+            mem::align_of::<Mat4>() as u64,
+            uniform_transform_buffer_memory_req.size,
         );
-        uniform_aligned_slice.copy_from_slice(&[uniform_color_buffer_data]);
-        device.unmap_memory(uniform_color_buffer_memory);
+        uniform_aligned_slice.copy_from_slice(&[uniform_transform_buffer_data]);
+        device.unmap_memory(uniform_transform_buffer_memory);
         device
-            .bind_buffer_memory(uniform_color_buffer, uniform_color_buffer_memory, 0)
+            .bind_buffer_memory(uniform_transform_buffer, uniform_transform_buffer_memory, 0)
             .unwrap();
 
         (
-            uniform_color_buffer,
-            uniform_color_buffer_memory,
-            uniform_color_buffer_data,
+            uniform_transform_buffer,
+            uniform_transform_buffer_memory,
+            uniform_transform_buffer_data,
         )
     }
 
