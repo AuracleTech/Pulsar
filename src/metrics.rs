@@ -12,6 +12,7 @@ pub(crate) struct Metrics {
     total_frames: u32,
     restart_frame_duration: Duration,
 }
+
 impl Default for Metrics {
     fn default() -> Self {
         Self {
@@ -26,6 +27,7 @@ impl Default for Metrics {
         }
     }
 }
+
 impl Metrics {
     pub(crate) fn start_frame(&mut self) {
         self.restart_frame_duration = self.frame_tick.elapsed();
