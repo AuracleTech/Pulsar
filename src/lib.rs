@@ -1362,7 +1362,7 @@ impl Engine {
     unsafe fn create_framebuffers(
         device: &Device,
         surface: &EngineSurface,
-        present_image_views: &Vec<vk::ImageView>,
+        present_image_views: &[vk::ImageView],
         depth_image_view: vk::ImageView,
         renderpass: vk::RenderPass,
     ) -> Result<Vec<vk::Framebuffer>, Box<dyn Error>> {
