@@ -239,7 +239,7 @@ impl Engine {
         let mut rng = rand::thread_rng();
 
         #[cfg(debug_assertions)]
-        Shader::on_start_compile_shaders();
+        Shader::compile_shaders();
 
         unsafe {
             let entry = Entry::linked();

@@ -52,7 +52,7 @@ impl<'a> Shader<'a> {
         }
     }
 
-    pub fn on_start_compile_shaders() {
+    pub fn compile_shaders() {
         if Path::new(COMPILE_SHADERS_PATH).exists() {
             let files =
                 std::fs::read_dir(COMPILE_SHADERS_PATH).expect("Failed to read shader files");
