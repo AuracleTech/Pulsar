@@ -9,7 +9,7 @@ use ash::{
     util::Align,
     vk, Device, Entry, Instance,
 };
-use glam::{Mat4, Vec4};
+use glam::Mat4;
 use log::debug;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
@@ -21,9 +21,8 @@ use std::{
 };
 use winit::{
     dpi::PhysicalSize,
-    event_loop::EventLoop,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
-    window::{Window, WindowBuilder},
+    window::Window,
 };
 
 #[derive(Clone, Debug, Copy)]
@@ -151,8 +150,8 @@ struct EngineSurface {
 
 struct EngineSwapchain {
     swapchain_khr: vk::SwapchainKHR,
-    desired_image_count: u32,
-    present_mode: vk::PresentModeKHR,
+    _desired_image_count: u32,
+    _present_mode: vk::PresentModeKHR,
     present_queue: vk::Queue,
 }
 
@@ -176,12 +175,12 @@ struct SwapchainResources {
 }
 
 pub struct Engine {
-    rng: rand::rngs::ThreadRng,
+    _rng: rand::rngs::ThreadRng,
 
-    entry: Entry,
+    _entry: Entry,
 
     instance: Instance,
-    pdevices: Vec<vk::PhysicalDevice>,
+    _pdevices: Vec<vk::PhysicalDevice>,
     pdevice: vk::PhysicalDevice,
     surface_loader: surface::Instance,
 
@@ -298,7 +297,7 @@ impl Engine {
             let renderpass = Engine::create_renderpass(&surface, &device)?;
 
             let (descriptor_pool, descriptor_sets, desc_set_layouts) =
-                Engine::create_descriptor_set(&device, &device_memory_properties);
+                Engine::create_descriptor_set(&device);
 
             let (
                 graphic_pipeline,
@@ -681,13 +680,17 @@ impl Engine {
                 present_image_views,
             };
 
-            Ok(Self {
-                rng,
+            let metrics = Metrics::default();
 
-                entry,
+            debug!("Engine started at {:?}", metrics.start);
+
+            Ok(Self {
+                _rng: rng,
+
+                _entry: entry,
 
                 instance,
-                pdevices,
+                _pdevices: pdevices,
                 surface_loader,
 
                 debug_utils_loader,
@@ -733,7 +736,7 @@ impl Engine {
 
                 minimized: false,
 
-                metrics: Metrics::default(),
+                metrics,
 
                 uniform,
             })
@@ -965,8 +968,8 @@ impl Engine {
 
         Ok(EngineSwapchain {
             swapchain_khr: swapchain,
-            desired_image_count,
-            present_mode,
+            _desired_image_count: desired_image_count,
+            _present_mode: present_mode,
             present_queue,
         })
     }
@@ -1160,7 +1163,6 @@ impl Engine {
 
     unsafe fn create_descriptor_set(
         device: &Device,
-        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> (
         vk::DescriptorPool,
         Vec<vk::DescriptorSet>,
