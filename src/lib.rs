@@ -199,6 +199,10 @@ pub struct Engine {
 
     device: Device,
 
+    descriptor_sets: Vec<vk::DescriptorSet>,
+    desc_set_layouts: [vk::DescriptorSetLayout; 1],
+    image_buffer_memory: vk::DeviceMemory,
+
     renderpass: vk::RenderPass,
     framebuffers: Vec<vk::Framebuffer>,
     graphic_pipeline: vk::Pipeline,
@@ -209,9 +213,6 @@ pub struct Engine {
     vertex_shader_module: vk::ShaderModule,
     fragment_shader_module: vk::ShaderModule,
 
-    descriptor_sets: Vec<vk::DescriptorSet>,
-    desc_set_layouts: [vk::DescriptorSetLayout; 1],
-    image_buffer_memory: vk::DeviceMemory,
     image_buffer: vk::Buffer,
     texture_memory: vk::DeviceMemory,
     tex_image_view: vk::ImageView,
@@ -296,51 +297,8 @@ impl Engine {
 
             let renderpass = Engine::create_renderpass(&surface, &device)?;
 
-            // MARK: DESCRIPTOR SET
-            let descriptor_sizes = [
-                vk::DescriptorPoolSize {
-                    ty: vk::DescriptorType::UNIFORM_BUFFER,
-                    descriptor_count: 1,
-                },
-                vk::DescriptorPoolSize {
-                    ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: 1,
-                },
-            ];
-            let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
-                .pool_sizes(&descriptor_sizes)
-                .max_sets(1);
-
-            let descriptor_pool = device
-                .create_descriptor_pool(&descriptor_pool_info, None)
-                .unwrap();
-            let desc_layout_bindings = [
-                vk::DescriptorSetLayoutBinding {
-                    descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::VERTEX,
-                    ..Default::default()
-                },
-                vk::DescriptorSetLayoutBinding {
-                    binding: 1,
-                    descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                    descriptor_count: 1,
-                    stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                    ..Default::default()
-                },
-            ];
-            let descriptor_info =
-                vk::DescriptorSetLayoutCreateInfo::default().bindings(&desc_layout_bindings);
-
-            let desc_set_layouts = [device
-                .create_descriptor_set_layout(&descriptor_info, None)
-                .unwrap()];
-
-            let desc_alloc_info = vk::DescriptorSetAllocateInfo::default()
-                .descriptor_pool(descriptor_pool)
-                .set_layouts(&desc_set_layouts);
-            let descriptor_sets = device.allocate_descriptor_sets(&desc_alloc_info).unwrap();
-            // MARK: END DESCRIPTOR SET
+            let (descriptor_pool, descriptor_sets, desc_set_layouts) =
+                Engine::create_descriptor_set(&device, &device_memory_properties);
 
             let (
                 graphic_pipeline,
@@ -751,6 +709,10 @@ impl Engine {
                 framebuffers,
                 graphic_pipeline,
 
+                descriptor_sets,
+                desc_set_layouts,
+                descriptor_pool,
+
                 viewports,
                 scissors,
                 graphics_pipelines,
@@ -758,8 +720,6 @@ impl Engine {
                 vertex_shader_module,
                 fragment_shader_module,
 
-                descriptor_sets,
-                desc_set_layouts,
                 image_buffer_memory,
                 image_buffer,
                 texture_memory,
@@ -767,7 +727,6 @@ impl Engine {
                 texture_image,
                 uniform_color_buffer,
                 uniform_buffer_memory: uniform_color_buffer_memory,
-                descriptor_pool,
                 texture_sampler,
 
                 registered_meshes,
@@ -1197,6 +1156,61 @@ impl Engine {
             .unwrap();
 
         Ok((present_complete_semaphore, rendering_complete_semaphore))
+    }
+
+    unsafe fn create_descriptor_set(
+        device: &Device,
+        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
+    ) -> (
+        vk::DescriptorPool,
+        Vec<vk::DescriptorSet>,
+        [vk::DescriptorSetLayout; 1],
+    ) {
+        let descriptor_sizes = [
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+            },
+            vk::DescriptorPoolSize {
+                ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+            },
+        ];
+        let descriptor_pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&descriptor_sizes)
+            .max_sets(1);
+
+        let descriptor_pool = device
+            .create_descriptor_pool(&descriptor_pool_info, None)
+            .unwrap();
+        let desc_layout_bindings = [
+            vk::DescriptorSetLayoutBinding {
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::VERTEX,
+                ..Default::default()
+            },
+            vk::DescriptorSetLayoutBinding {
+                binding: 1,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                descriptor_count: 1,
+                stage_flags: vk::ShaderStageFlags::FRAGMENT,
+                ..Default::default()
+            },
+        ];
+        let descriptor_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&desc_layout_bindings);
+
+        let desc_set_layouts = [device
+            .create_descriptor_set_layout(&descriptor_info, None)
+            .unwrap()];
+
+        let desc_alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&desc_set_layouts);
+        let descriptor_sets = device.allocate_descriptor_sets(&desc_alloc_info).unwrap();
+
+        (descriptor_pool, descriptor_sets, desc_set_layouts)
     }
 
     unsafe fn create_pipeline(
