@@ -40,7 +40,7 @@ impl Mesh {
             let index_buffer_memory_req = device.get_buffer_memory_requirements(index_buffer);
             let index_buffer_memory_index = find_memorytype_index(
                 &index_buffer_memory_req,
-                &device_memory_properties,
+                device_memory_properties,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )
             .expect("Unable to find suitable memorytype for the index buffer.");
@@ -86,7 +86,7 @@ impl Mesh {
 
             let vertex_input_buffer_memory_index = find_memorytype_index(
                 &vertex_input_buffer_memory_req,
-                &device_memory_properties,
+                device_memory_properties,
                 vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
             )
             .expect("Unable to find suitable memorytype for the vertex buffer.");
