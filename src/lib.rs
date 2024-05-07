@@ -1432,7 +1432,7 @@ impl Engine {
         let uniform_buffer_memory_req = device.get_buffer_memory_requirements(uniform_buffer);
         let uniform_buffer_memory_index = find_memorytype_index(
             &uniform_buffer_memory_req,
-            &device_memory_properties,
+            device_memory_properties,
             vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
         )
         .expect("Unable to find suitable memorytype for the vertex buffer.");
