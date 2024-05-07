@@ -2,6 +2,7 @@ mod camera;
 mod metrics;
 mod model;
 mod shaders;
+mod vulkan_callback;
 
 use ash::{
     ext::debug_utils,
@@ -16,8 +17,7 @@ use model::{Mesh, RegisteredMesh, Vertex};
 use rand::Rng;
 use shaders::Shader;
 use std::{
-    borrow::Cow, default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char,
-    thread::JoinHandle,
+    default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, thread::JoinHandle,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -88,34 +88,6 @@ fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
             .queue_submit(submit_queue, &[submit_info], command_buffer_reuse_fence)
             .expect("queue submit failed.");
     }
-}
-
-unsafe extern "system" fn vulkan_debug_callback(
-    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
-    p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT<'_>,
-    _user_data: *mut std::os::raw::c_void,
-) -> vk::Bool32 {
-    let callback_data = *p_callback_data;
-    let message_id_number = callback_data.message_id_number;
-
-    let message_id_name = if callback_data.p_message_id_name.is_null() {
-        Cow::from("")
-    } else {
-        ffi::CStr::from_ptr(callback_data.p_message_id_name).to_string_lossy()
-    };
-
-    let message = if callback_data.p_message.is_null() {
-        Cow::from("")
-    } else {
-        ffi::CStr::from_ptr(callback_data.p_message).to_string_lossy()
-    };
-
-    debug!(
-        "{message_severity:?}: {message_type:?} [{message_id_name} ({message_id_number})] : {message}",
-    );
-
-    vk::FALSE
 }
 
 fn find_memorytype_index(
@@ -796,7 +768,7 @@ impl Engine {
                     | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION
                     | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
             )
-            .pfn_user_callback(Some(vulkan_debug_callback));
+            .pfn_user_callback(Some(vulkan_callback::vulkan_debug_callback));
         let debug_utils_loader = debug_utils::Instance::new(entry, instance);
         let debug_call_back = debug_utils_loader
             .create_debug_utils_messenger(&debug_info, None)
