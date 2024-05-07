@@ -3,22 +3,22 @@ use std::time::{Duration, Instant};
 const CYCLE_REPORT_INTERVAL: Duration = Duration::from_millis(1000);
 #[derive(Debug)]
 pub struct Metrics {
-    engine_start: Instant,
-    cycle_start: Instant,
-    frame_start: Instant,
-    frame_end: Instant,
-    slowest_render: Duration,
-    fastest_render: Duration,
-    total_render: Duration,
-    total_frames: u32,
-    delta_end_to_start: Duration,
+    pub start: Instant,
+    pub cycle_start: Instant,
+    pub frame_start: Instant,
+    pub frame_end: Instant,
+    pub slowest_render: Duration,
+    pub fastest_render: Duration,
+    pub total_render: Duration,
+    pub total_frames: u32,
+    pub delta_end_to_start: Duration,
     pub delta_start_to_start: Duration,
 }
 
 impl Default for Metrics {
     fn default() -> Self {
         Self {
-            engine_start: Instant::now(),
+            start: Instant::now(),
             cycle_start: Instant::now(),
             frame_start: Instant::now(),
             frame_end: Instant::now(),
@@ -67,44 +67,24 @@ impl Metrics {
         self.frame_end = Instant::now();
     }
 
-    pub fn engine_uptime(&self) -> Duration {
-        self.engine_start.elapsed()
-    }
+    // pub fn print_memory_usage() {
+    //     if let Some(usage) = memory_stats::memory_stats() {
+    //         log::info!("Virtual mem {}", Metrics::format_size(usage.virtual_mem));
+    //         log::info!("Physical mem {}", Metrics::format_size(usage.physical_mem));
+    //     }
+    // }
 
-    pub fn frame_count(&self) -> u32 {
-        self.total_frames
-    }
+    // fn format_size(mut size: usize) -> String {
+    //     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
+    //     let mut index = 0;
 
-    pub fn average_frame_time(&self) -> Duration {
-        self.total_render / self.total_frames
-    }
+    //     while size >= 1024 && index < units.len() - 1 {
+    //         size /= 1024;
+    //         index += 1;
+    //     }
 
-    pub fn slowest_frame_time(&self) -> Duration {
-        self.slowest_render
-    }
-
-    pub fn fastest_frame_time(&self) -> Duration {
-        self.fastest_render
-    }
-
-    pub fn print_memory_usage() {
-        if let Some(usage) = memory_stats::memory_stats() {
-            log::info!("Virtual mem {}", Metrics::format_size(usage.virtual_mem));
-            log::info!("Physical mem {}", Metrics::format_size(usage.physical_mem));
-        }
-    }
-
-    fn format_size(mut size: usize) -> String {
-        let units = ["B", "KB", "MB", "GB", "TB", "PB"];
-        let mut index = 0;
-
-        while size >= 1024 && index < units.len() - 1 {
-            size /= 1024;
-            index += 1;
-        }
-
-        format!("{} {}", size, units[index])
-    }
+    //     format!("{} {}", size, units[index])
+    // }
 }
 
 #[macro_export]
