@@ -108,7 +108,7 @@ impl Metrics {
 }
 
 #[macro_export]
-macro_rules! metrics {
+macro_rules! stopwatch {
     ($func:expr) => {{
         use std::time::{Duration, Instant};
 
