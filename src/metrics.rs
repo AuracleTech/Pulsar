@@ -53,7 +53,7 @@ impl Metrics {
 
         if self.cycle_start.elapsed() > CYCLE_REPORT_INTERVAL {
             log::info!(
-                "ΔEndStart {:?} max(RenderTime) {:?} Min(RenderTime) {:?} x̄ {:?} t {} / {:?}s",
+                "ΔEndStart {:?} Max(RenderTime) {:?} Min(RenderTime) {:?} x̄ {:?} t {} / {:?}s",
                 self.delta_end_to_start,
                 self.slowest_render,
                 self.fastest_render,
