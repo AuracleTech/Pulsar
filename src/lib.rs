@@ -307,7 +307,7 @@ impl Engine {
                 pipeline_layout,
                 vertex_shader_module,
                 fragment_shader_module,
-            ) = Engine::create_pipeline(&device, &surface, renderpass, desc_set_layouts)?;
+            ) = Engine::create_pipeline(&device, &surface, renderpass, desc_set_layouts);
 
             let framebuffers = Engine::create_framebuffers(
                 &device,
@@ -1220,18 +1220,15 @@ impl Engine {
         surface: &EngineSurface,
         renderpass: vk::RenderPass,
         desc_set_layouts: [vk::DescriptorSetLayout; 1],
-    ) -> Result<
-        (
-            vk::Pipeline,
-            [vk::Viewport; 1],
-            [vk::Rect2D; 1],
-            Vec<vk::Pipeline>,
-            vk::PipelineLayout,
-            vk::ShaderModule,
-            vk::ShaderModule,
-        ),
-        Box<dyn Error>,
-    > {
+    ) -> (
+        vk::Pipeline,
+        [vk::Viewport; 1],
+        [vk::Rect2D; 1],
+        Vec<vk::Pipeline>,
+        vk::PipelineLayout,
+        vk::ShaderModule,
+        vk::ShaderModule,
+    ) {
         let vertex_shader = Shader::from_filename("vert", vk::ShaderStageFlags::VERTEX, device);
         let frag_shader = Shader::from_filename("frag", vk::ShaderStageFlags::FRAGMENT, device);
 
@@ -1348,7 +1345,7 @@ impl Engine {
 
         let graphic_pipeline = graphics_pipelines[0];
 
-        Ok((
+        (
             graphic_pipeline,
             viewports,
             scissors,
@@ -1356,7 +1353,7 @@ impl Engine {
             pipeline_layout,
             vertex_shader.module,
             frag_shader.module,
-        ))
+        )
     }
 
     unsafe fn create_framebuffers(
