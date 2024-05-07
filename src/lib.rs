@@ -256,7 +256,7 @@ impl Engine {
                 .expect("Physical device error");
 
             let (surface, pdevice, queue_family_index) =
-                Engine::create_surface(&entry, &instance, &window, &pdevices, &surface_loader)?;
+                Engine::create_surface(&entry, &instance, window, &pdevices, &surface_loader)?;
 
             let device = Engine::create_device(&instance, pdevice, queue_family_index)?;
 
