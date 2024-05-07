@@ -23,11 +23,8 @@ use winit::{
     dpi::PhysicalSize,
     event_loop::EventLoop,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
-    window::WindowBuilder,
+    window::{Window, WindowBuilder},
 };
-
-const APP_NAME: &str = "Nhope Engine";
-const APP_VERSION: &str = "0.1.0";
 
 #[derive(Clone, Debug, Copy)]
 pub struct Vector3 {
@@ -181,7 +178,6 @@ struct SwapchainResources {
 pub struct Engine {
     rng: rand::rngs::ThreadRng,
 
-    window: winit::window::Window,
     entry: Entry,
 
     instance: Instance,
@@ -235,10 +231,8 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new(
-        window_width: u32,
-        window_height: u32,
-    ) -> Result<(Self, EventLoop<()>), Box<dyn Error>> {
+    #[profiling::function]
+    pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
         env_logger::init();
 
         // TODO seeder RNG only
@@ -248,15 +242,6 @@ impl Engine {
         Shader::on_start_compile_shaders();
 
         unsafe {
-            let event_loop = EventLoop::new()?;
-            let window = WindowBuilder::new()
-                .with_title(APP_NAME)
-                .with_inner_size(winit::dpi::LogicalSize::new(
-                    f64::from(window_width),
-                    f64::from(window_height),
-                ))
-                .build(&event_loop)
-                .unwrap();
             let entry = Entry::linked();
 
             let instance = Engine::create_instance(&entry, &window)?;
@@ -738,65 +723,61 @@ impl Engine {
                 present_image_views,
             };
 
-            Ok((
-                Self {
-                    rng,
+            Ok(Self {
+                rng,
 
-                    window,
-                    entry,
+                entry,
 
-                    instance,
-                    pdevices,
-                    surface_loader,
+                instance,
+                pdevices,
+                surface_loader,
 
-                    debug_utils_loader,
-                    debug_call_back,
+                debug_utils_loader,
+                debug_call_back,
 
-                    device_memory_properties,
-                    queue_family_index,
-                    pdevice,
+                device_memory_properties,
+                queue_family_index,
+                pdevice,
 
-                    surface,
+                surface,
 
-                    swapchain_loader,
-                    swapchain,
-                    swapchain_resources,
+                swapchain_loader,
+                swapchain,
+                swapchain_resources,
 
-                    device,
+                device,
 
-                    renderpass,
-                    framebuffers,
-                    graphic_pipeline,
+                renderpass,
+                framebuffers,
+                graphic_pipeline,
 
-                    viewports,
-                    scissors,
-                    graphics_pipelines,
-                    pipeline_layout,
-                    vertex_shader_module,
-                    fragment_shader_module,
+                viewports,
+                scissors,
+                graphics_pipelines,
+                pipeline_layout,
+                vertex_shader_module,
+                fragment_shader_module,
 
-                    descriptor_sets,
-                    desc_set_layouts,
-                    image_buffer_memory,
-                    image_buffer,
-                    texture_memory,
-                    tex_image_view,
-                    texture_image,
-                    uniform_color_buffer,
-                    uniform_buffer_memory: uniform_color_buffer_memory,
-                    descriptor_pool,
-                    texture_sampler,
+                descriptor_sets,
+                desc_set_layouts,
+                image_buffer_memory,
+                image_buffer,
+                texture_memory,
+                tex_image_view,
+                texture_image,
+                uniform_color_buffer,
+                uniform_buffer_memory: uniform_color_buffer_memory,
+                descriptor_pool,
+                texture_sampler,
 
-                    registered_meshes,
+                registered_meshes,
 
-                    minimized: false,
+                minimized: false,
 
-                    metrics: Metrics::default(),
+                metrics: Metrics::default(),
 
-                    uniform,
-                },
-                event_loop,
-            ))
+                uniform,
+            })
         }
     }
 
@@ -804,7 +785,7 @@ impl Engine {
         entry: &Entry,
         window: &winit::window::Window,
     ) -> Result<Instance, Box<dyn Error>> {
-        let app_name = ffi::CStr::from_bytes_with_nul_unchecked(APP_NAME.as_bytes());
+        let app_name = ffi::CStr::from_bytes_with_nul_unchecked(env!("CARGO_PKG_NAME").as_bytes());
         let appinfo = vk::ApplicationInfo::default()
             .application_name(app_name)
             .application_version(0)
@@ -1494,6 +1475,7 @@ impl Engine {
         device.unmap_memory(uniform_buffer_memory);
     }
 
+    #[profiling::function]
     pub fn render(&mut self) {
         self.metrics.start_frame();
         let delta = self.metrics.delta_start_to_start;
@@ -1503,6 +1485,21 @@ impl Engine {
         }
 
         self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
+
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
 
         unsafe {
             Engine::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
