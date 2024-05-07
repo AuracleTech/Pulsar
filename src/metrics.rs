@@ -115,7 +115,7 @@ macro_rules! metrics {
         let start_time = Instant::now();
         let result = $func;
         let elapsed = start_time.elapsed();
-        debug!("{:?} tps ~{:.2}", elapsed, 1.0 / elapsed.as_secs_f64());
+        log::debug!("{:?} tps ~{:.2}", elapsed, 1.0 / elapsed.as_secs_f64());
 
         result
     }};
