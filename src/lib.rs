@@ -625,10 +625,10 @@ impl Engine {
 
                     let offset = vertices.len() as u32 - 4;
                     let quad_indices = vec![
-                        offset + 0,
+                        offset,
                         offset + 1,
                         offset + 2,
-                        offset + 0,
+                        offset,
                         offset + 2,
                         offset + 3,
                     ];
