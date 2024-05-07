@@ -19,8 +19,7 @@ impl<'a> Shader<'a> {
             panic!("Shader not compiled: {}", path);
         }
         let file_content = std::fs::read(path).expect("Failed to read shader file");
-        let bytecode = Vec::<u8>::from(file_content);
-        let mut shader_bin_cursor = Cursor::new(bytecode);
+        let mut shader_bin_cursor = Cursor::new(file_content);
 
         let shader_aligned =
             read_spv(&mut shader_bin_cursor).expect("Failed to read vertex shader spv file");
