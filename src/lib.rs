@@ -289,7 +289,7 @@ impl Engine {
                 &surface,
                 &pdevice,
                 &swapchain_loader,
-            )?;
+            );
 
             let (present_complete_semaphore, rendering_complete_semaphore) =
                 Engine::create_semaphores(&device)?;
@@ -1051,17 +1051,14 @@ impl Engine {
         surface: &EngineSurface,
         pdevice: &vk::PhysicalDevice,
         swapchain_loader: &swapchain::Device,
-    ) -> Result<
-        (
-            Vec<ash::vk::Image>,
-            Vec<vk::ImageView>,
-            vk::ImageView,
-            vk::Image,
-            vk::DeviceMemory,
-            vk::PhysicalDeviceMemoryProperties,
-        ),
-        Box<dyn Error>,
-    > {
+    ) -> (
+        Vec<ash::vk::Image>,
+        Vec<vk::ImageView>,
+        vk::ImageView,
+        vk::Image,
+        vk::DeviceMemory,
+        vk::PhysicalDeviceMemoryProperties,
+    ) {
         let present_images = swapchain_loader
             .get_swapchain_images(swapchain.swapchain_khr)
             .unwrap();
@@ -1136,14 +1133,14 @@ impl Engine {
             .create_image_view(&depth_image_view_info, None)
             .unwrap();
 
-        Ok((
+        (
             present_images,
             present_image_views,
             depth_image_view,
             depth_image,
             depth_image_memory,
             device_memory_properties,
-        ))
+        )
     }
 
     unsafe fn create_semaphores(
@@ -1709,8 +1706,7 @@ impl Engine {
                 &self.surface,
                 &self.pdevice,
                 &self.swapchain_loader,
-            )
-            .unwrap();
+            );
 
             self.swapchain_resources.present_images = present_images;
             self.swapchain_resources.present_image_views = present_image_views;
