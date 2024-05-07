@@ -805,7 +805,7 @@ impl Engine {
                     | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
             )
             .pfn_user_callback(Some(vulkan_debug_callback));
-        let debug_utils_loader = debug_utils::Instance::new(&entry, &instance);
+        let debug_utils_loader = debug_utils::Instance::new(&entry, instance);
         let debug_call_back = debug_utils_loader
             .create_debug_utils_messenger(&debug_info, None)
             .unwrap();
