@@ -817,12 +817,12 @@ impl Engine {
         entry: &Entry,
         instance: &Instance,
         window: &winit::window::Window,
-        pdevices: &Vec<ash::vk::PhysicalDevice>,
+        pdevices: &[ash::vk::PhysicalDevice],
         surface_loader: &surface::Instance,
     ) -> Result<(EngineSurface, vk::PhysicalDevice, u32), Box<dyn Error>> {
         let surface = ash_window::create_surface(
-            &entry,
-            &instance,
+            entry,
+            instance,
             window.display_handle()?.as_raw(),
             window.window_handle()?.as_raw(),
             None,
