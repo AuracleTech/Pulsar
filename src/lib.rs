@@ -25,14 +25,6 @@ use winit::{
     window::Window,
 };
 
-#[derive(Clone, Debug, Copy)]
-pub struct Vector3 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub _pad: f32,
-}
-
 #[macro_export]
 macro_rules! offset_of {
     ($self:path, $field:ident) => {{
@@ -1495,21 +1487,6 @@ impl Engine {
         }
 
         self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
-
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
-        // TEMP
 
         unsafe {
             Engine::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
