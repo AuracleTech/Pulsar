@@ -244,7 +244,7 @@ impl Engine {
         unsafe {
             let entry = Entry::linked();
 
-            let instance = Engine::create_instance(&entry, &window)?;
+            let instance = Engine::create_instance(&entry, window)?;
 
             let surface_loader = surface::Instance::new(&entry, &instance);
 
@@ -805,7 +805,7 @@ impl Engine {
                     | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
             )
             .pfn_user_callback(Some(vulkan_debug_callback));
-        let debug_utils_loader = debug_utils::Instance::new(&entry, instance);
+        let debug_utils_loader = debug_utils::Instance::new(entry, instance);
         let debug_call_back = debug_utils_loader
             .create_debug_utils_messenger(&debug_info, None)
             .unwrap();
