@@ -11,7 +11,6 @@ use ash::{
     vk, Device, Entry, Instance,
 };
 use glam::Mat4;
-use log::debug;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
 use rand::Rng;
@@ -644,10 +643,6 @@ impl Engine {
                 present_image_views,
             };
 
-            let metrics = Metrics::default();
-
-            debug!("Engine started at {:?}", metrics.start);
-
             Ok(Self {
                 _rng: rng,
 
@@ -700,7 +695,7 @@ impl Engine {
 
                 minimized: false,
 
-                metrics,
+                metrics: Metrics::default(),
 
                 uniform,
             })

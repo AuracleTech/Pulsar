@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 const CYCLE_REPORT_INTERVAL: Duration = Duration::from_millis(1000);
+
 #[derive(Debug)]
 pub struct Metrics {
     pub start: Instant,
