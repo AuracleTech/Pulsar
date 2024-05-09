@@ -15,7 +15,7 @@ use ash::{
 use glam::Mat4;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+
 use shaders::Shader;
 use std::{
     default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, thread::JoinHandle,
@@ -200,7 +200,7 @@ impl Engine {
         unsafe {
             let entry = Entry::linked();
 
-            let instance = Engine::create_instance(&entry, &window)?;
+            let instance = Engine::create_instance(&entry, window)?;
 
             let surface_loader = surface::Instance::new(&entry, &instance);
 
@@ -212,7 +212,7 @@ impl Engine {
                 .expect("Physical device error");
 
             let (surface, pdevice, queue_family_index) =
-                Engine::create_surface(&entry, &instance, &window, &pdevices, &surface_loader)?;
+                Engine::create_surface(&entry, &instance, window, &pdevices, &surface_loader)?;
 
             let device = Engine::create_device(&instance, pdevice, queue_family_index)?;
 
