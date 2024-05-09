@@ -10,15 +10,12 @@ use nhope::{window::Window, Engine};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let window = Window::create_main(APP_NAME, APP_NAME, WIN_WIDTH, WIN_HEIGHT)?;
-
     let mut engine = Engine::new(&window)?;
-
     window.show();
 
     std::thread::spawn(move || loop {
         engine.render();
     });
-
     window.run();
 
     Ok(())

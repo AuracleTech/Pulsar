@@ -15,7 +15,6 @@ use ash::{
 use glam::Mat4;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
-
 use shaders::Shader;
 use std::{
     default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, thread::JoinHandle,
