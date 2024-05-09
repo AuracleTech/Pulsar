@@ -21,11 +21,6 @@ use std::{
     default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, thread::JoinHandle,
 };
 use window::Window;
-// use winit::{
-//     dpi::PhysicalSize,
-//     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
-//     window::Window,
-// };
 
 #[macro_export]
 macro_rules! offset_of {
