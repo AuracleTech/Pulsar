@@ -3,6 +3,8 @@ mod metrics;
 mod model;
 mod shaders;
 mod vulkan_callback;
+#[allow(dead_code)]
+pub mod window;
 
 use ash::{
     ext::debug_utils,
@@ -13,16 +15,17 @@ use ash::{
 use glam::Mat4;
 use metrics::Metrics;
 use model::{Mesh, RegisteredMesh, Vertex};
-use rand::Rng;
+use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use shaders::Shader;
 use std::{
     default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, thread::JoinHandle,
 };
-use winit::{
-    dpi::PhysicalSize,
-    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
-    window::Window,
-};
+use window::Window;
+// use winit::{
+//     dpi::PhysicalSize,
+//     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
+//     window::Window,
+// };
 
 #[macro_export]
 macro_rules! offset_of {
@@ -138,8 +141,6 @@ struct SwapchainResources {
 }
 
 pub struct Engine {
-    _rng: rand::rngs::ThreadRng,
-
     _entry: Entry,
 
     instance: Instance,
@@ -198,16 +199,13 @@ impl Engine {
     pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
         env_logger::init();
 
-        // TODO seeder RNG only
-        let mut rng = rand::thread_rng();
-
         #[cfg(debug_assertions)]
         Shader::compile_shaders();
 
         unsafe {
             let entry = Entry::linked();
 
-            let instance = Engine::create_instance(&entry, window)?;
+            let instance = Engine::create_instance(&entry, &window)?;
 
             let surface_loader = surface::Instance::new(&entry, &instance);
 
@@ -219,7 +217,7 @@ impl Engine {
                 .expect("Physical device error");
 
             let (surface, pdevice, queue_family_index) =
-                Engine::create_surface(&entry, &instance, window, &pdevices, &surface_loader)?;
+                Engine::create_surface(&entry, &instance, &window, &pdevices, &surface_loader)?;
 
             let device = Engine::create_device(&instance, pdevice, queue_family_index)?;
 
@@ -231,7 +229,8 @@ impl Engine {
                 &surface,
                 pdevice,
                 queue_family_index,
-                window.inner_size(),
+                window.width,
+                window.height,
                 &swapchain_loader,
             )?;
 
@@ -557,52 +556,6 @@ impl Engine {
             // MARK: MESHES
             let mut registered_meshes = Vec::new();
 
-            for _ in 0..5 {
-                let mut vertices = Vec::new();
-                let mut indices = Vec::new();
-                for _ in 0..10 {
-                    let x = rng.gen_range(-1.0..1.0);
-                    let y = rng.gen_range(-1.0..1.0);
-
-                    vertices.extend(
-                        [
-                            Vertex {
-                                pos: [x, y, 1.0, 1.0],
-                                uv: [0.0, 0.0],
-                            },
-                            Vertex {
-                                pos: [x + 0.1, y, 1.0, 1.0],
-                                uv: [0.0, 1.0],
-                            },
-                            Vertex {
-                                pos: [x + 0.1, y - 0.1, 1.0, 1.0],
-                                uv: [1.0, 1.0],
-                            },
-                            Vertex {
-                                pos: [x, y - 0.1, 1.0, 1.0],
-                                uv: [1.0, 0.0],
-                            },
-                        ]
-                        .iter(),
-                    );
-
-                    let offset = vertices.len() as u32 - 4;
-                    let quad_indices = vec![
-                        offset,
-                        offset + 1,
-                        offset + 2,
-                        offset,
-                        offset + 2,
-                        offset + 3,
-                    ];
-
-                    indices.extend(quad_indices);
-                }
-                let mesh = Mesh { vertices, indices };
-                let registered_mesh = mesh.register(&device, &device_memory_properties);
-                registered_meshes.push(registered_mesh);
-            }
-
             // MARK: SQUARE
             let square = Mesh {
                 vertices: vec![
@@ -644,8 +597,6 @@ impl Engine {
             };
 
             Ok(Self {
-                _rng: rng,
-
                 _entry: entry,
 
                 instance,
@@ -702,10 +653,7 @@ impl Engine {
         }
     }
 
-    unsafe fn create_instance(
-        entry: &Entry,
-        window: &winit::window::Window,
-    ) -> Result<Instance, Box<dyn Error>> {
+    unsafe fn create_instance(entry: &Entry, window: &Window) -> Result<Instance, Box<dyn Error>> {
         let app_name = ffi::CStr::from_bytes_with_nul_unchecked(env!("CARGO_PKG_NAME").as_bytes());
         let appinfo = vk::ApplicationInfo::default()
             .application_name(app_name)
@@ -714,7 +662,7 @@ impl Engine {
             .engine_version(0)
             .api_version(vk::make_api_version(0, 1, 0, 0));
         let mut extension_names =
-            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())
+            ash_window::enumerate_required_extensions(window.raw_display_handle)
                 .unwrap()
                 .to_vec();
         extension_names.push(debug_utils::NAME.as_ptr());
@@ -775,18 +723,18 @@ impl Engine {
     unsafe fn create_surface(
         entry: &Entry,
         instance: &Instance,
-        window: &winit::window::Window,
+        window: &Window,
         pdevices: &[ash::vk::PhysicalDevice],
         surface_loader: &surface::Instance,
     ) -> Result<(EngineSurface, vk::PhysicalDevice, u32), Box<dyn Error>> {
         let surface = ash_window::create_surface(
             entry,
             instance,
-            window.display_handle()?.as_raw(),
-            window.window_handle()?.as_raw(),
+            window.raw_display_handle,
+            window.raw_window_handle,
             None,
         )
-        .unwrap();
+        .expect("Surface creation error");
 
         let (pdevice, queue_family_index) = pdevices
             .iter()
@@ -870,7 +818,8 @@ impl Engine {
         surface: &EngineSurface,
         pdevice: vk::PhysicalDevice,
         queue_family_index: u32,
-        window_inner_size: PhysicalSize<u32>,
+        width: u32,
+        height: u32,
         swapchain_loader: &swapchain::Device,
     ) -> Result<EngineSwapchain, Box<dyn Error>> {
         let present_modes = surface_loader
@@ -891,10 +840,7 @@ impl Engine {
             desired_image_count = surface.capabilities.max_image_count;
         }
         let surface_resolution = match surface.capabilities.current_extent.width {
-            u32::MAX => vk::Extent2D {
-                width: window_inner_size.width,
-                height: window_inner_size.height,
-            },
+            u32::MAX => vk::Extent2D { width, height },
             _ => surface.capabilities.current_extent,
         };
         let pre_transform = if surface
@@ -1449,7 +1395,7 @@ impl Engine {
         self.metrics.start_frame();
         let delta = self.metrics.delta_start_to_start;
 
-        if !self.minimized {
+        if self.minimized {
             return;
         }
 
@@ -1577,17 +1523,15 @@ impl Engine {
         })
     }
 
-    pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
-        if size.width == 0 || size.height == 0 {
-            self.minimized = false;
+    pub fn recreate_swapchain(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            self.minimized = true;
             return;
         }
 
-        self.minimized = true;
+        self.minimized = false;
 
-        if size.width == self.surface.resolution.width
-            && size.height == self.surface.resolution.height
-        {
+        if width == self.surface.resolution.width && height == self.surface.resolution.height {
             return;
         }
 
@@ -1597,10 +1541,7 @@ impl Engine {
             self.destroy_swapchain();
 
             // surface
-            self.surface.resolution = vk::Extent2D {
-                width: size.width,
-                height: size.height,
-            };
+            self.surface.resolution = vk::Extent2D { width, height };
             self.surface.capabilities = self
                 .surface_loader
                 .get_physical_device_surface_capabilities(self.pdevice, self.surface.surface_khr)
@@ -1610,17 +1551,14 @@ impl Engine {
             self.viewports = [vk::Viewport {
                 x: 0.0,
                 y: 0.0,
-                width: size.width as f32,
-                height: size.height as f32,
+                width: width as f32,
+                height: height as f32,
                 min_depth: 0.0,
                 max_depth: 1.0,
             }];
             self.scissors = [vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
-                extent: vk::Extent2D {
-                    width: size.width,
-                    height: size.height,
-                },
+                extent: vk::Extent2D { width, height },
             }];
 
             // swapchain
@@ -1630,7 +1568,8 @@ impl Engine {
                 &self.surface,
                 self.pdevice,
                 self.queue_family_index,
-                size,
+                width,
+                height,
                 &self.swapchain_loader,
             )
             .unwrap();
