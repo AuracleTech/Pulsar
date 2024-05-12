@@ -3,6 +3,7 @@ mod metrics;
 mod model;
 mod shaders;
 mod vulkan_callback;
+pub mod window;
 
 use ash::{
     ext::debug_utils,
@@ -137,9 +138,8 @@ struct SwapchainResources {
     rendering_complete_semaphore: vk::Semaphore,
 }
 
+// FIX rename to Renderer
 pub struct Engine {
-    _rng: rand::rngs::ThreadRng,
-
     _entry: Entry,
 
     instance: Instance,
@@ -196,10 +196,7 @@ pub struct Engine {
 impl Engine {
     #[profiling::function]
     pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
-        env_logger::init();
-
-        // TODO seeder RNG only
-        let mut rng = rand::thread_rng();
+        env_logger::init(); // CHANGE
 
         #[cfg(debug_assertions)]
         Shader::compile_shaders();
@@ -555,6 +552,9 @@ impl Engine {
             device.update_descriptor_sets(&write_desc_sets, &[]);
 
             // MARK: MESHES
+            // TODO seeded RNG only
+            let mut rng = rand::thread_rng();
+
             let mut registered_meshes = Vec::new();
 
             for _ in 0..5 {
@@ -644,8 +644,6 @@ impl Engine {
             };
 
             Ok(Self {
-                _rng: rng,
-
                 _entry: entry,
 
                 instance,

@@ -67,25 +67,6 @@ impl Metrics {
 
         self.frame_end = Instant::now();
     }
-
-    // pub fn print_memory_usage() {
-    //     if let Some(usage) = memory_stats::memory_stats() {
-    //         log::info!("Virtual mem {}", Metrics::format_size(usage.virtual_mem));
-    //         log::info!("Physical mem {}", Metrics::format_size(usage.physical_mem));
-    //     }
-    // }
-
-    // fn format_size(mut size: usize) -> String {
-    //     let units = ["B", "KB", "MB", "GB", "TB", "PB"];
-    //     let mut index = 0;
-
-    //     while size >= 1024 && index < units.len() - 1 {
-    //         size /= 1024;
-    //         index += 1;
-    //     }
-
-    //     format!("{} {}", size, units[index])
-    // }
 }
 
 #[macro_export]
