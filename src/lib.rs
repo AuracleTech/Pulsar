@@ -1,9 +1,9 @@
+pub mod app;
 mod camera;
 mod metrics;
 mod model;
 mod shaders;
 mod vulkan_callback;
-pub mod window;
 
 use ash::{
     ext::debug_utils,
@@ -196,7 +196,7 @@ pub struct Engine {
 impl Engine {
     #[profiling::function]
     pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
-        env_logger::init(); // CHANGE
+        env_logger::init(); // CHANGE move
 
         #[cfg(debug_assertions)]
         Shader::compile_shaders();
@@ -1447,9 +1447,27 @@ impl Engine {
         self.metrics.start_frame();
         let delta = self.metrics.delta_start_to_start;
 
-        if !self.minimized {
+        if self.minimized {
             return;
         }
+
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP 50 ms sleep
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
+        // TEMP
 
         self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
 

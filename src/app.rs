@@ -52,7 +52,6 @@ pub struct Application {
     // /// With OpenGL it could be EGLDisplay.
     // #[cfg(not(any(android_platform, ios_platform)))]
     // context: Option<Context<DisplayHandle<'static>>>,
-    renderer: Option<Engine>,
 }
 
 impl Application {
@@ -91,8 +90,6 @@ impl Application {
             custom_cursors,
             icon,
             windows: Default::default(),
-
-            renderer: None,
         }
     }
 
@@ -317,15 +314,10 @@ impl ApplicationHandler<UserEvent> for Application {
                 // info!("Window={window_id:?} changed scale to {scale_factor}");
             }
             WindowEvent::ThemeChanged(theme) => {
-                // info!("Theme changed to {theme:?}");
+                // info!("Theme changed to {theme:?}");Windows API,
                 window.set_theme(theme);
             }
             WindowEvent::RedrawRequested => {
-                if let Some(renderer) = &mut self.renderer {
-                    renderer.render();
-                    window.window.request_redraw();
-                    println!("Redraw requested");
-                }
                 // if let Err(err) = window.draw() {
                 //     error!("Error drawing window: {err}");
                 // }
@@ -463,7 +455,19 @@ impl ApplicationHandler<UserEvent> for Application {
             .create_window(event_loop, None)
             .expect("failed to create initial window");
         let window = self.windows.get_mut(&window_id).unwrap();
-        self.renderer = Some(Engine::new(&window.window).unwrap());
+
+        let mut engine = Engine::new(&window.window).expect("failed to create engine");
+
+        std::thread::spawn(move || {
+            // Wake up the `event_loop` once every second and dispatch a custom event
+            // from a different thread.
+            // info!("Starting to send user event every second");
+            loop {
+                // let _ = _event_loop_proxy.send_event(UserEvent::WakeUp);
+                // std::thread::sleep(std::time::Duration::from_secs(1));
+                engine.render();
+            }
+        });
 
         // self.print_help();
     }

@@ -1,4 +1,4 @@
-use nhope::window::{Application, UserEvent};
+use nhope::app::{Application, UserEvent};
 use nhope::Engine;
 use std::error::Error;
 use winit::event_loop::EventLoop;
