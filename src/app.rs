@@ -590,11 +590,12 @@ impl WindowState {
     /// Cycle through the grab modes ignoring errors.
     fn cycle_cursor_grab(&mut self) {
         self.cursor_grab = match self.cursor_grab {
+            // CursorGrabMode::Locked is unimplemented yet.
             CursorGrabMode::None => CursorGrabMode::Confined,
-            CursorGrabMode::Confined => CursorGrabMode::Locked,
-            CursorGrabMode::Locked => CursorGrabMode::None,
+            CursorGrabMode::Confined => CursorGrabMode::None,
+            _ => CursorGrabMode::None,
         };
-        // info!("Changing cursor grab mode to {:?}", self.cursor_grab);
+        info!("Changing cursor grab mode to {:?}", self.cursor_grab);
         if let Err(err) = self.window.set_cursor_grab(self.cursor_grab) {
             panic!("Error setting cursor grab: {err}");
         }
