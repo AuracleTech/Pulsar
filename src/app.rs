@@ -112,12 +112,6 @@ impl Application {
             window_attributes = window_attributes.with_tabbing_identifier(&tab_id);
         }
 
-        #[cfg(web_platform)]
-        {
-            use winit::platform::web::WindowAttributesExtWebSys;
-            window_attributes = window_attributes.with_append(true);
-        }
-
         let window = event_loop.create_window(window_attributes)?;
 
         #[cfg(ios_platform)]
@@ -168,12 +162,6 @@ impl Application {
             Action::Minimize => window.minimize(),
             Action::NextCursor => window.next_cursor(),
             Action::NextCustomCursor => window.next_custom_cursor(&self.custom_cursors),
-            #[cfg(web_platform)]
-            Action::UrlCustomCursor => window.url_custom_cursor(event_loop),
-            #[cfg(web_platform)]
-            Action::AnimationCustomCursor => {
-                window.animation_custom_cursor(event_loop, &self.custom_cursors)
-            }
             Action::CycleCursorGrab => window.cycle_cursor_grab(),
             Action::DragWindow => window.drag_window(),
             Action::DragResizeWindow => window.drag_resize_window(),
@@ -706,35 +694,6 @@ impl WindowState {
         self.window.set_cursor(cursor);
     }
 
-    /// Custom cursor from an URL.
-    #[cfg(web_platform)]
-    fn url_custom_cursor(&mut self, event_loop: &ActiveEventLoop) {
-        let cursor = event_loop.create_custom_cursor(url_custom_cursor());
-
-        self.window.set_cursor(cursor);
-    }
-
-    /// Custom cursor from a URL.
-    #[cfg(web_platform)]
-    fn animation_custom_cursor(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        custom_cursors: &[CustomCursor],
-    ) {
-        use std::time::Duration;
-        use winit::platform::web::CustomCursorExtWebSys;
-
-        let cursors = vec![
-            custom_cursors[0].clone(),
-            custom_cursors[1].clone(),
-            event_loop.create_custom_cursor(url_custom_cursor()),
-        ];
-        let cursor = CustomCursor::from_animation(Duration::from_secs(3), cursors).unwrap();
-        let cursor = event_loop.create_custom_cursor(cursor);
-
-        self.window.set_cursor(cursor);
-    }
-
     /// Resize the window to the new size.
     fn resize(&mut self, size: PhysicalSize<u32>) {
         // info!("Resized to {size:?}");
@@ -899,10 +858,6 @@ enum Action {
     Minimize,
     NextCursor,
     NextCustomCursor,
-    #[cfg(web_platform)]
-    UrlCustomCursor,
-    #[cfg(web_platform)]
-    AnimationCustomCursor,
     CycleCursorGrab,
     PrintHelp,
     DragWindow,
@@ -930,10 +885,6 @@ impl Action {
             Action::ToggleResizeIncrements => "Use resize increments when resizing window",
             Action::NextCursor => "Advance the cursor to the next value",
             Action::NextCustomCursor => "Advance custom cursor to the next value",
-            #[cfg(web_platform)]
-            Action::UrlCustomCursor => "Custom cursor from an URL",
-            #[cfg(web_platform)]
-            Action::AnimationCustomCursor => "Custom cursor from an animation",
             Action::CycleCursorGrab => "Cycle through cursor grab mode",
             Action::PrintHelp => "Print help",
             Action::DragWindow => "Start window drag",
@@ -960,24 +911,6 @@ fn decode_cursor(bytes: &[u8]) -> CustomCursorSource {
     let (_, w, h) = samples.extents();
     let (w, h) = (w as u16, h as u16);
     CustomCursor::from_rgba(samples.samples, w, h, w / 2, h / 2).unwrap()
-}
-
-#[cfg(web_platform)]
-fn url_custom_cursor() -> CustomCursorSource {
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    use winit::platform::web::CustomCursorExtWebSys;
-
-    static URL_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    CustomCursor::from_url(
-        format!(
-            "https://picsum.photos/128?random={}",
-            URL_COUNTER.fetch_add(1, Ordering::Relaxed)
-        ),
-        64,
-        64,
-    )
 }
 
 fn load_icon(bytes: &[u8]) -> Icon {
@@ -1075,18 +1008,6 @@ const KEY_BINDINGS: &[Binding<&'static str>] = &[
     // C.
     Binding::new("C", ModifiersState::CONTROL, Action::NextCursor),
     Binding::new("C", ModifiersState::ALT, Action::NextCustomCursor),
-    #[cfg(web_platform)]
-    Binding::new(
-        "C",
-        ModifiersState::CONTROL.union(ModifiersState::SHIFT),
-        Action::UrlCustomCursor,
-    ),
-    #[cfg(web_platform)]
-    Binding::new(
-        "C",
-        ModifiersState::ALT.union(ModifiersState::SHIFT),
-        Action::AnimationCustomCursor,
-    ),
     Binding::new("Z", ModifiersState::CONTROL, Action::ToggleCursorVisibility),
     #[cfg(macos_platform)]
     Binding::new("T", ModifiersState::SUPER, Action::CreateNewTab),
