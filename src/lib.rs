@@ -1,5 +1,6 @@
 pub mod app;
 mod camera;
+mod debugging;
 mod metrics;
 mod model;
 mod shaders;
@@ -17,10 +18,15 @@ use model::{Mesh, RegisteredMesh, Vertex};
 use rand::Rng;
 use shaders::Shader;
 use std::{
-    default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, thread::JoinHandle,
+    default::Default,
+    error::Error,
+    ffi, mem,
+    ops::Drop,
+    os::raw::c_char,
+    sync::mpsc::{self},
+    thread::JoinHandle,
 };
 use winit::{
-    dpi::PhysicalSize,
     raw_window_handle::{HasDisplayHandle, HasWindowHandle},
     window::Window,
 };
@@ -34,6 +40,12 @@ macro_rules! offset_of {
             std::ptr::addr_of!(b.$field) as isize - std::ptr::addr_of!(b) as isize
         }
     }};
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub enum UserEvent {
+    Resize { width: u32, height: u32 },
 }
 
 /// Helper function for submitting command buffers. Immediately waits for the fence before the command buffer
@@ -139,7 +151,7 @@ struct SwapchainResources {
 }
 
 // FIX rename to Renderer
-pub struct Engine {
+pub struct Renderer {
     _entry: Entry,
 
     instance: Instance,
@@ -191,11 +203,16 @@ pub struct Engine {
     metrics: Metrics,
 
     uniform: Mat4,
+
+    receiver: mpsc::Receiver<UserEvent>,
 }
 
-impl Engine {
+impl Renderer {
     #[profiling::function]
-    pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        window: &Window,
+        receiver: mpsc::Receiver<UserEvent>,
+    ) -> Result<Self, Box<dyn Error>> {
         env_logger::init(); // CHANGE move
 
         #[cfg(debug_assertions)]
@@ -204,36 +221,39 @@ impl Engine {
         unsafe {
             let entry = Entry::linked();
 
-            let instance = Engine::create_instance(&entry, window)?;
+            let instance = Renderer::create_instance(&entry, window)?;
 
             let surface_loader = surface::Instance::new(&entry, &instance);
 
             let (debug_utils_loader, debug_call_back) =
-                Engine::create_debug_utils_messenger(&entry, &instance)?;
+                Renderer::create_debug_utils_messenger(&entry, &instance)?;
 
             let pdevices = instance
                 .enumerate_physical_devices()
                 .expect("Physical device error");
 
             let (surface, pdevice, queue_family_index) =
-                Engine::create_surface(&entry, &instance, window, &pdevices, &surface_loader)?;
+                Renderer::create_surface(&entry, &instance, window, &pdevices, &surface_loader)?;
 
-            let device = Engine::create_device(&instance, pdevice, queue_family_index)?;
+            let device = Renderer::create_device(&instance, pdevice, queue_family_index)?;
 
             let swapchain_loader = swapchain::Device::new(&instance, &device);
 
-            let swapchain = Engine::create_swapchain(
+            let (width, height) = window.inner_size().into();
+
+            let swapchain = Renderer::create_swapchain(
                 &device,
                 &surface_loader,
                 &surface,
                 pdevice,
                 queue_family_index,
-                window.inner_size(),
+                width,
+                height,
                 &swapchain_loader,
             )?;
 
             let (draw_commands_reuse_fence, setup_commands_reuse_fence) =
-                Engine::create_fences(&device)?;
+                Renderer::create_fences(&device)?;
 
             let (
                 present_images,
@@ -242,7 +262,7 @@ impl Engine {
                 depth_image,
                 depth_image_memory,
                 device_memory_properties,
-            ) = Engine::create_views_and_depth(
+            ) = Renderer::create_views_and_depth(
                 &device,
                 &instance,
                 &swapchain,
@@ -252,12 +272,12 @@ impl Engine {
             );
 
             let (present_complete_semaphore, rendering_complete_semaphore) =
-                Engine::create_semaphores(&device)?;
+                Renderer::create_semaphores(&device)?;
 
-            let renderpass = Engine::create_renderpass(&surface, &device)?;
+            let renderpass = Renderer::create_renderpass(&surface, &device)?;
 
             let (descriptor_pool, descriptor_sets, desc_set_layouts) =
-                Engine::create_descriptor_set(&device);
+                Renderer::create_descriptor_set(&device);
 
             let (
                 graphic_pipeline,
@@ -267,9 +287,9 @@ impl Engine {
                 pipeline_layout,
                 vertex_shader_module,
                 fragment_shader_module,
-            ) = Engine::create_pipeline(&device, &surface, renderpass, desc_set_layouts);
+            ) = Renderer::create_pipeline(&device, &surface, renderpass, desc_set_layouts);
 
-            let framebuffers = Engine::create_framebuffers(
+            let framebuffers = Renderer::create_framebuffers(
                 &device,
                 &surface,
                 &present_image_views,
@@ -277,10 +297,10 @@ impl Engine {
                 renderpass,
             )?;
 
-            let pool = Engine::create_command_pools(&device, queue_family_index)?;
+            let pool = Renderer::create_command_pools(&device, queue_family_index)?;
 
             let (setup_command_buffer, draw_command_buffer) =
-                Engine::create_command_buffers(&device, pool)?;
+                Renderer::create_command_buffers(&device, pool)?;
 
             record_submit_commandbuffer(
                 &device,
@@ -324,7 +344,7 @@ impl Engine {
             uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
 
             let (uniform_color_buffer, uniform_color_buffer_memory) =
-                Engine::create_uniform_buffer(&device, &device_memory_properties, uniform);
+                Renderer::create_uniform_buffer(&device, &device_memory_properties, uniform);
 
             // MARK: IMAGE
             let image = image::load_from_memory(include_bytes!("../assets/img/picture.png"))
@@ -696,6 +716,8 @@ impl Engine {
                 metrics: Metrics::default(),
 
                 uniform,
+
+                receiver,
             })
         }
     }
@@ -868,7 +890,8 @@ impl Engine {
         surface: &EngineSurface,
         pdevice: vk::PhysicalDevice,
         queue_family_index: u32,
-        window_inner_size: PhysicalSize<u32>,
+        width: u32,
+        height: u32,
         swapchain_loader: &swapchain::Device,
     ) -> Result<EngineSwapchain, Box<dyn Error>> {
         let present_modes = surface_loader
@@ -889,10 +912,7 @@ impl Engine {
             desired_image_count = surface.capabilities.max_image_count;
         }
         let surface_resolution = match surface.capabilities.current_extent.width {
-            u32::MAX => vk::Extent2D {
-                width: window_inner_size.width,
-                height: window_inner_size.height,
-            },
+            u32::MAX => vk::Extent2D { width, height },
             _ => surface.capabilities.current_extent,
         };
         let pre_transform = if surface
@@ -1444,6 +1464,8 @@ impl Engine {
 
     #[profiling::function]
     pub fn render(&mut self) {
+        self.process_all_events();
+
         self.metrics.start_frame();
         let delta = self.metrics.delta_start_to_start;
 
@@ -1459,7 +1481,7 @@ impl Engine {
         // TEMP
         // TEMP
         // TEMP 50 ms sleep
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        // std::thread::sleep(std::time::Duration::from_millis(50));
         // TEMP
         // TEMP
         // TEMP
@@ -1472,7 +1494,7 @@ impl Engine {
         self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
 
         unsafe {
-            Engine::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
+            Renderer::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
 
             let result = self.swapchain_loader.acquire_next_image(
                 self.swapchain.swapchain_khr,
@@ -1482,10 +1504,7 @@ impl Engine {
             );
             let (present_index, _) = match result {
                 Ok(result) => result,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    eprintln!("OUT_OF_DATE_KHR caught at start");
-                    return;
-                }
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return self.outdated_swapchain(),
                 Err(err) => panic!("Failed to acquire next image: {:?}", err),
             };
             let clear_values = [
@@ -1579,7 +1598,7 @@ impl Engine {
 
             match queue_present_result {
                 Ok(_) => {}
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => eprintln!("OUT_OF_DATE_KHR at present"),
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.outdated_swapchain(),
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
         }
@@ -1593,17 +1612,32 @@ impl Engine {
         })
     }
 
-    pub fn recreate_swapchain(&mut self, size: PhysicalSize<u32>) {
-        if size.width == 0 || size.height == 0 {
-            self.minimized = false;
-            return;
+    fn outdated_swapchain(&mut self) {
+        self.process_all_events();
+    }
+
+    pub fn process_all_events(&mut self) {
+        loop {
+            match self.receiver.try_recv() {
+                Ok(event) => match event {
+                    UserEvent::Resize { width, height } => {
+                        println!("Processed resize event: {}x{}", width, height);
+                        self.recreate_swapchain(width, height);
+                    }
+                },
+                _ => break,
+            }
+        }
+    }
+
+    pub fn recreate_swapchain(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return self.minimized = true;
         }
 
-        self.minimized = true;
+        self.minimized = false;
 
-        if size.width == self.surface.resolution.width
-            && size.height == self.surface.resolution.height
-        {
+        if width == self.surface.resolution.width && height == self.surface.resolution.height {
             return;
         }
 
@@ -1613,10 +1647,7 @@ impl Engine {
             self.destroy_swapchain();
 
             // surface
-            self.surface.resolution = vk::Extent2D {
-                width: size.width,
-                height: size.height,
-            };
+            self.surface.resolution = vk::Extent2D { width, height };
             self.surface.capabilities = self
                 .surface_loader
                 .get_physical_device_surface_capabilities(self.pdevice, self.surface.surface_khr)
@@ -1626,17 +1657,14 @@ impl Engine {
             self.viewports = [vk::Viewport {
                 x: 0.0,
                 y: 0.0,
-                width: size.width as f32,
-                height: size.height as f32,
+                width: width as f32,
+                height: height as f32,
                 min_depth: 0.0,
                 max_depth: 1.0,
             }];
             self.scissors = [vk::Rect2D {
                 offset: vk::Offset2D { x: 0, y: 0 },
-                extent: vk::Extent2D {
-                    width: size.width,
-                    height: size.height,
-                },
+                extent: vk::Extent2D { width, height },
             }];
 
             // swapchain
@@ -1646,7 +1674,8 @@ impl Engine {
                 &self.surface,
                 self.pdevice,
                 self.queue_family_index,
-                size,
+                width,
+                height,
                 &self.swapchain_loader,
             )
             .unwrap();
@@ -1747,7 +1776,7 @@ impl Engine {
     }
 }
 
-impl Drop for Engine {
+impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
             self.device.device_wait_idle().unwrap();

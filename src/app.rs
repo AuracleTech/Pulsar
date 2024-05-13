@@ -3,8 +3,8 @@ use std::error::Error;
 use std::fmt::Debug;
 #[cfg(not(any(android_platform, ios_platform)))]
 use std::num::NonZeroU32;
-use std::sync::Arc;
-use std::{fmt, mem};
+use std::sync::{mpsc, Arc};
+use std::{fmt, mem, thread};
 
 use cursor_icon::CursorIcon;
 #[cfg(not(any(android_platform, ios_platform)))]
@@ -29,16 +29,10 @@ use winit::platform::startup_notify::{
     self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify, WindowExtStartupNotify,
 };
 
-use crate::Engine;
+use crate::{Renderer, UserEvent};
 
 /// The amount of points to around the window for drag resize direction calculations.
 const BORDER_SIZE: f64 = 20.;
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub enum UserEvent {
-    WakeUp,
-}
 
 /// Application state and event handling.
 pub struct Application {
@@ -135,7 +129,9 @@ impl Application {
             window.recognize_pan_gesture(true, 2, 2);
         }
 
-        let window_state = WindowState::new(self, window)?;
+        let (sender, receiver) = mpsc::channel::<UserEvent>();
+
+        let window_state = WindowState::new(self, window, sender, Some(receiver))?;
         let window_id = window_state.window.id();
         // info!("Created new window with id={window_id:?}");
         self.windows.insert(window_id, window_state);
@@ -456,16 +452,22 @@ impl ApplicationHandler<UserEvent> for Application {
             .expect("failed to create initial window");
         let window = self.windows.get_mut(&window_id).unwrap();
 
-        let mut engine = Engine::new(&window.window).expect("failed to create engine");
+        let mut renderer = if let Some(receiver) = window.renderer_receiver.take() {
+            Renderer::new(&window.window, receiver).expect("failed to create engine")
+        } else {
+            panic!("Thread communication channel is missing");
+        };
 
-        std::thread::spawn(move || {
+        // Create a channel for sending user events from another thread to the event loop.
+
+        thread::spawn(move || {
             // Wake up the `event_loop` once every second and dispatch a custom event
             // from a different thread.
             // info!("Starting to send user event every second");
             loop {
                 // let _ = _event_loop_proxy.send_event(UserEvent::WakeUp);
                 // std::thread::sleep(std::time::Duration::from_secs(1));
-                engine.render();
+                renderer.render();
             }
         });
 
@@ -495,6 +497,8 @@ struct WindowState {
     /// NOTE: This surface must be dropped before the `Window`.
     // #[cfg(not(any(android_platform, ios_platform)))]
     // surface: Surface<DisplayHandle<'static>, Arc<Window>>,
+    renderer_sender: mpsc::Sender<UserEvent>,
+    renderer_receiver: Option<mpsc::Receiver<UserEvent>>,
     /// The actual winit Window.
     window: Arc<Window>,
     /// The window theme we're drawing with.
@@ -524,7 +528,12 @@ struct WindowState {
 }
 
 impl WindowState {
-    fn new(app: &Application, window: Window) -> Result<Self, Box<dyn Error>> {
+    fn new(
+        app: &Application,
+        window: Window,
+        renderer_sender: mpsc::Sender<UserEvent>,
+        renderer_receiver: Option<mpsc::Receiver<UserEvent>>,
+    ) -> Result<Self, Box<dyn Error>> {
         let window = Arc::new(window);
 
         // SAFETY: the surface is dropped before the `window` which provided it with handle, thus
@@ -550,6 +559,8 @@ impl WindowState {
             named_idx,
             // #[cfg(not(any(android_platform, ios_platform)))]
             // surface,
+            renderer_sender,
+            renderer_receiver,
             window,
             theme,
             ime,
@@ -645,7 +656,7 @@ impl WindowState {
         };
         // info!("Changing cursor grab mode to {:?}", self.cursor_grab);
         if let Err(err) = self.window.set_cursor_grab(self.cursor_grab) {
-            // error!("Error setting cursor grab: {err}");
+            panic!("Error setting cursor grab: {err}");
         }
     }
 
@@ -729,11 +740,14 @@ impl WindowState {
         // info!("Resized to {size:?}");
         #[cfg(not(any(android_platform, ios_platform)))]
         {
-            let (width, height) = match (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-            {
-                (Some(width), Some(height)) => (width, height),
-                _ => return,
-            };
+            println!("Resized to {size:?}");
+            self.renderer_sender
+                .send(UserEvent::Resize {
+                    width: size.width,
+                    height: size.height,
+                })
+                .expect("failed to send resize event");
+
             // self.surface
             //     .resize(width, height)
             //     .expect("failed to resize inner buffer");
