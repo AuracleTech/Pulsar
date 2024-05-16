@@ -1,5 +1,10 @@
+use crate::vulkan::debug_callback::DebugUtils;
+use crate::{Renderer, UserEvent};
+use ash::vk::PhysicalDevice;
+use ash::Entry;
 use cursor_icon::CursorIcon;
 use log::info;
+use rwh_06::HasDisplayHandle;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
@@ -22,10 +27,9 @@ use winit::platform::startup_notify::{
     self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify, WindowExtStartupNotify,
 };
 
-use crate::{Renderer, UserEvent};
-
 /// The amount of points to around the window for drag resize direction calculations.
 const BORDER_SIZE: f64 = 20.;
+pub const WIN_START_INNER_SIZE: PhysicalSize<u32> = PhysicalSize::new(1280, 720);
 
 /// Application state and event handling.
 pub struct Application {
@@ -34,10 +38,18 @@ pub struct Application {
     /// Application icon.
     icon: Icon,
     windows: HashMap<WindowId, WindowState>,
+
+    entry: Entry,
+    instance: ash::Instance,
+    surface_loader: ash::khr::surface::Instance,
+    #[cfg(debug_assertions)]
+    debug_utils: DebugUtils,
+
+    physical_device_list: Vec<PhysicalDevice>,
 }
 
 impl Application {
-    pub fn new<T>(event_loop: &EventLoop<T>) -> Self {
+    pub fn new<T>(event_loop: &EventLoop<T>) -> Result<Self, Box<dyn Error>> {
         // You'll have to choose an icon size at your own discretion. On X11, the desired size
         // varies by WM, and on Windows, you still have to account for screen scaling. Here
         // we use 32px, since it seems to work well enough in most cases. Be careful about
@@ -55,13 +67,44 @@ impl Application {
                 .create_custom_cursor(decode_cursor(include_bytes!("../assets/img/gradient.png"))),
         ];
 
-        Self {
-            // #[cfg(not(any(android_platform, ios_platform)))]
-            // context,
+        let entry = Entry::linked();
+
+        let instance =
+            crate::vulkan::instance::create_instance(&entry, event_loop.display_handle().unwrap())?;
+
+        let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
+
+        #[cfg(debug_assertions)]
+        let debug_utils = DebugUtils::new(&entry, &instance)?;
+
+        let physical_device_list = unsafe {
+            instance
+                .enumerate_physical_devices()
+                .expect("Physical device error")
+        };
+
+        // create artist and send it in a new thread
+        // let artist = Artist::new();
+        // let artist_arc_rwlock = Arc::new(RwLock::new(artist));
+
+        // let artist_arc_rwlock_clone = artist_arc_rwlock.clone();
+        // thread::spawn(move || {
+        //     let artist = artist_arc_rwlock_clone.read().unwrap();
+        //     artist.run();
+        // });
+
+        Ok(Self {
             custom_cursors,
             icon,
             windows: Default::default(),
-        }
+
+            entry,
+            instance,
+            surface_loader,
+            #[cfg(debug_assertions)]
+            debug_utils,
+            physical_device_list,
+        })
     }
 
     fn create_window(
@@ -75,7 +118,8 @@ impl Application {
         let mut window_attributes = Window::default_attributes()
             .with_title("Winit window")
             .with_transparent(true)
-            .with_window_icon(Some(self.icon.clone()));
+            .with_window_icon(Some(self.icon.clone()))
+            .with_inner_size(WIN_START_INNER_SIZE);
 
         #[cfg(any(x11_platform, wayland_platform))]
         if let Some(token) = event_loop.read_token_from_env() {
@@ -240,6 +284,19 @@ impl Application {
                 binding.action,
                 binding.action.help(),
             );
+        }
+    }
+}
+
+impl Drop for Application {
+    fn drop(&mut self) {
+        self.debug_utils.destroy();
+
+        unsafe {
+            // self.surface_loader
+            //     .destroy_surface(self.surface.surface_khr, None);
+
+            self.instance.destroy_instance(None);
         }
     }
 }
@@ -413,12 +470,12 @@ impl ApplicationHandler<UserEvent> for Application {
             .expect("failed to create initial window");
         let window_state = self.windows.get_mut(&window_id).unwrap();
 
+        // TEMP
         let mut renderer = if let Some(receiver) = window_state.renderer_receiver.take() {
             Renderer::new(&window_state.window, receiver).expect("failed to create engine")
         } else {
             panic!("Thread communication channel is missing");
         };
-
         thread::spawn(move || loop {
             renderer.render();
         });
@@ -472,7 +529,10 @@ struct WindowState {
     named_idx: usize,
     custom_idx: usize,
     cursor_hidden: bool,
+    // swapchain: AppSwapchain,
 }
+
+struct AppSwapchain {}
 
 impl WindowState {
     fn new(
@@ -492,8 +552,7 @@ impl WindowState {
         let ime = true;
         window.set_ime_allowed(ime);
 
-        let size = window.inner_size();
-        let mut state = Self {
+        Ok(Self {
             #[cfg(macos_platform)]
             option_as_alt: window.option_as_alt(),
             custom_idx: app.custom_cursors.len() - 1,
@@ -511,10 +570,7 @@ impl WindowState {
             rotated: Default::default(),
             panned: Default::default(),
             zoom: Default::default(),
-        };
-
-        state.resize(size);
-        Ok(state)
+        })
     }
 
     pub fn toggle_ime(&mut self) {
@@ -647,26 +703,26 @@ impl WindowState {
         self.window.set_cursor(cursor);
     }
 
-    /// Resize the window to the new size.
     fn resize(&mut self, size: PhysicalSize<u32>) {
         // info!("Resized to {size:?}");
         #[cfg(not(any(android_platform, ios_platform)))]
         {
-            println!("Resized to {size:?}");
             self.renderer_sender
                 .send(UserEvent::Resize {
                     width: size.width,
                     height: size.height,
                 })
                 .expect("failed to send resize event");
+
+            // input_manager
+            // let mut input_manager = self.input_manager_arc_rwlock.write().unwrap();
+            // input_manager.window_size = size;
         }
-        self.window.request_redraw();
     }
 
     /// Change the theme.
     fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
-        self.window.request_redraw();
     }
 
     /// Show window menu.
@@ -738,8 +794,8 @@ impl WindowState {
     /// Change window occlusion state.
     fn set_occluded(&mut self, occluded: bool) {
         self.occluded = occluded;
-        if !occluded {
-            self.window.request_redraw();
+        if occluded {
+            // TODO stop rendering
         }
     }
 }

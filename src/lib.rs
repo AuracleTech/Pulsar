@@ -1,9 +1,11 @@
 pub mod app;
+
 mod camera;
 mod debugging;
 mod metrics;
 mod model;
 mod shaders;
+mod vulkan;
 mod vulkan_callback;
 
 use ash::{
@@ -18,12 +20,7 @@ use model::{Mesh, RegisteredMesh, Vertex};
 use rand::Rng;
 use shaders::Shader;
 use std::{
-    default::Default,
-    error::Error,
-    ffi, mem,
-    ops::Drop,
-    os::raw::c_char,
-    sync::mpsc::{self},
+    default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, sync::mpsc,
     thread::JoinHandle,
 };
 use winit::{
@@ -133,6 +130,7 @@ struct EngineSwapchain {
 
 struct SwapchainResources {
     pool: vk::CommandPool,
+
     draw_command_buffer: vk::CommandBuffer,
     setup_command_buffer: vk::CommandBuffer,
 
@@ -219,18 +217,14 @@ impl Renderer {
         Shader::compile_shaders();
 
         unsafe {
-            let entry = Entry::linked();
-
-            let instance = Renderer::create_instance(&entry, window)?;
-
-            let surface_loader = surface::Instance::new(&entry, &instance);
-
+            let entry = Entry::linked(); // NOTE already migrated
+            let instance = Renderer::create_instance(&entry, window)?; // NOTE already migrated
+            let surface_loader = surface::Instance::new(&entry, &instance); // NOTE already migrated
             let (debug_utils_loader, debug_call_back) =
-                Renderer::create_debug_utils_messenger(&entry, &instance)?;
-
+                Renderer::create_debug_utils_messenger(&entry, &instance)?; // NOTE already migrated
             let pdevices = instance
                 .enumerate_physical_devices()
-                .expect("Physical device error");
+                .expect("Physical device error"); // NOTE already migrated
 
             let (surface, pdevice, queue_family_index) =
                 Renderer::create_surface(&entry, &instance, window, &pdevices, &surface_loader)?;
@@ -1773,6 +1767,24 @@ impl Renderer {
             .destroy_image_view(self.swapchain_resources.depth_image_view, None);
         self.device
             .destroy_image(self.swapchain_resources.depth_image, None);
+    }
+}
+
+impl Drop for EngineSwapchain {
+    fn drop(&mut self) {
+        // unsafe {
+        //     self.device.device_wait_idle().unwrap();
+
+        //     self.device
+        //         .destroy_semaphore(self.present_complete_semaphore, None);
+        //     self.device
+        //         .destroy_semaphore(self.rendering_complete_semaphore, None);
+        //     self.device
+        //         .destroy_fence(self.draw_commands_reuse_fence, None);
+        //     self.device
+        //         .destroy_fence(self.setup_commands_reuse_fence, None);
+        //     self.device.destroy_command_pool(self.pool, None);
+        // }
     }
 }
 
