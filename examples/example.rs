@@ -1,4 +1,4 @@
-use nhope::{app::Application, UserEvent};
+use pulsar::{app::Application, UserEvent};
 use std::error::Error;
 use winit::event_loop::EventLoop;
 

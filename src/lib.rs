@@ -123,51 +123,51 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    unsafe fn create_instance(
-        entry: &Entry,
-        window: &winit::window::Window,
-    ) -> Result<Instance, Box<dyn Error>> {
-        let app_name = ffi::CStr::from_bytes_with_nul_unchecked(env!("CARGO_PKG_NAME").as_bytes());
-        let appinfo = vk::ApplicationInfo::default()
-            .application_name(app_name)
-            .application_version(0)
-            .engine_name(app_name)
-            .engine_version(0)
-            .api_version(vk::make_api_version(0, 1, 0, 0));
-        let mut extension_names =
-            ash_window::enumerate_required_extensions(window.raw_display_handle)
-                .unwrap()
-                .to_vec();
-        extension_names.push(debug_utils::NAME.as_ptr());
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            extension_names.push(ash::khr::portability_enumeration::NAME.as_ptr());
-            // Enabling this extension is a requirement when using `VK_KHR_portability_subset`
-            extension_names.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
-        }
-        let layer_names = [ffi::CStr::from_bytes_with_nul_unchecked(
-            b"VK_LAYER_KHRONOS_validation\0",
-        )];
-        let layers_names_raw: Vec<*const c_char> = layer_names
-            .iter()
-            .map(|raw_name| raw_name.as_ptr())
-            .collect();
-        let create_flags = if cfg!(any(target_os = "macos", target_os = "ios")) {
-            vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
-        } else {
-            vk::InstanceCreateFlags::default()
-        };
-        let create_info = vk::InstanceCreateInfo::default()
-            .application_info(&appinfo)
-            .enabled_layer_names(&layers_names_raw)
-            .enabled_extension_names(&extension_names)
-            .flags(create_flags);
-        let instance: Instance = entry
-            .create_instance(&create_info, None)
-            .expect("Instance creation error");
+    // unsafe fn create_instance(
+    //     entry: &Entry,
+    //     window: &winit::window::Window,
+    // ) -> Result<Instance, Box<dyn Error>> {
+    //     let app_name = ffi::CStr::from_bytes_with_nul_unchecked(env!("CARGO_PKG_NAME").as_bytes());
+    //     let appinfo = vk::ApplicationInfo::default()
+    //         .application_name(app_name)
+    //         .application_version(0)
+    //         .engine_name(app_name)
+    //         .engine_version(0)
+    //         .api_version(vk::make_api_version(0, 1, 0, 0));
+    //     let mut extension_names =
+    //         ash_window::enumerate_required_extensions(window.raw_display_handle)
+    //             .unwrap()
+    //             .to_vec();
+    //     extension_names.push(debug_utils::NAME.as_ptr());
+    //     #[cfg(any(target_os = "macos", target_os = "ios"))]
+    //     {
+    //         extension_names.push(ash::khr::portability_enumeration::NAME.as_ptr());
+    //         // Enabling this extension is a requirement when using `VK_KHR_portability_subset`
+    //         extension_names.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
+    //     }
+    //     let layer_names = [ffi::CStr::from_bytes_with_nul_unchecked(
+    //         b"VK_LAYER_KHRONOS_validation\0",
+    //     )];
+    //     let layers_names_raw: Vec<*const c_char> = layer_names
+    //         .iter()
+    //         .map(|raw_name| raw_name.as_ptr())
+    //         .collect();
+    //     let create_flags = if cfg!(any(target_os = "macos", target_os = "ios")) {
+    //         vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
+    //     } else {
+    //         vk::InstanceCreateFlags::default()
+    //     };
+    //     let create_info = vk::InstanceCreateInfo::default()
+    //         .application_info(&appinfo)
+    //         .enabled_layer_names(&layers_names_raw)
+    //         .enabled_extension_names(&extension_names)
+    //         .flags(create_flags);
+    //     let instance: Instance = entry
+    //         .create_instance(&create_info, None)
+    //         .expect("Instance creation error");
 
-        Ok(instance)
-    }
+    //     Ok(instance)
+    // }
 
     // unsafe fn create_debug_utils_messenger(
     //     entry: &Entry,
@@ -193,68 +193,68 @@ impl Renderer {
     //     Ok((debug_utils_loader, debug_call_back))
     // }
 
-    unsafe fn create_surface(
-        entry: &Entry,
-        instance: &Instance,
-        window: &Window,
-        pdevices: &[ash::vk::PhysicalDevice],
-        surface_loader: &surface::Instance,
-    ) -> Result<(EngineSurface, vk::PhysicalDevice, u32), Box<dyn Error>> {
-        let surface = ash_window::create_surface(
-            entry,
-            instance,
-            window.raw_display_handle,
-            window.raw_window_handle,
-            None,
-        )
-        .expect("Surface creation error");
+    // unsafe fn create_surface(
+    //     entry: &Entry,
+    //     instance: &Instance,
+    //     window: &Window,
+    //     pdevices: &[ash::vk::PhysicalDevice],
+    //     surface_loader: &surface::Instance,
+    // ) -> Result<(EngineSurface, vk::PhysicalDevice, u32), Box<dyn Error>> {
+    //     let surface = ash_window::create_surface(
+    //         entry,
+    //         instance,
+    //         window.raw_display_handle,
+    //         window.raw_window_handle,
+    //         None,
+    //     )
+    //     .expect("Surface creation error");
 
-        let (pdevice, queue_family_index) = pdevices
-            .iter()
-            .find_map(|pdevice| {
-                instance
-                    .get_physical_device_queue_family_properties(*pdevice)
-                    .iter()
-                    .enumerate()
-                    .find_map(|(index, info)| {
-                        let supports_graphic_and_surface =
-                            info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                                && surface_loader
-                                    .get_physical_device_surface_support(
-                                        *pdevice,
-                                        index as u32,
-                                        surface,
-                                    )
-                                    .unwrap();
-                        if supports_graphic_and_surface {
-                            Some((*pdevice, index))
-                        } else {
-                            None
-                        }
-                    })
-            })
-            .expect("Couldn't find suitable device.");
-        let queue_family_index = queue_family_index as u32;
+    //     let (pdevice, queue_family_index) = pdevices
+    //         .iter()
+    //         .find_map(|pdevice| {
+    //             instance
+    //                 .get_physical_device_queue_family_properties(*pdevice)
+    //                 .iter()
+    //                 .enumerate()
+    //                 .find_map(|(index, info)| {
+    //                     let supports_graphic_and_surface =
+    //                         info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+    //                             && surface_loader
+    //                                 .get_physical_device_surface_support(
+    //                                     *pdevice,
+    //                                     index as u32,
+    //                                     surface,
+    //                                 )
+    //                                 .unwrap();
+    //                     if supports_graphic_and_surface {
+    //                         Some((*pdevice, index))
+    //                     } else {
+    //                         None
+    //                     }
+    //                 })
+    //         })
+    //         .expect("Couldn't find suitable device.");
+    //     let queue_family_index = queue_family_index as u32;
 
-        let surface_format = surface_loader
-            .get_physical_device_surface_formats(pdevice, surface)
-            .unwrap()[0];
+    //     let surface_format = surface_loader
+    //         .get_physical_device_surface_formats(pdevice, surface)
+    //         .unwrap()[0];
 
-        let surface_capabilities = surface_loader
-            .get_physical_device_surface_capabilities(pdevice, surface)
-            .unwrap();
+    //     let surface_capabilities = surface_loader
+    //         .get_physical_device_surface_capabilities(pdevice, surface)
+    //         .unwrap();
 
-        Ok((
-            EngineSurface {
-                surface_khr: surface,
-                format: surface_format,
-                capabilities: surface_capabilities,
-                resolution: surface_capabilities.current_extent,
-            },
-            pdevice,
-            queue_family_index,
-        ))
-    }
+    //     Ok((
+    //         EngineSurface {
+    //             surface_khr: surface,
+    //             format: surface_format,
+    //             capabilities: surface_capabilities,
+    //             resolution: surface_capabilities.current_extent,
+    //         },
+    //         pdevice,
+    //         queue_family_index,
+    //     ))
+    // }
 
     unsafe fn create_device(
         instance: &Instance,
