@@ -6,3 +6,4 @@
 
 - Shader creation error management
 - Error management in general
+- offset_of! in the future might become stable, use it when it will be
