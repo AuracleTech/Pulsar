@@ -135,7 +135,7 @@ impl Renderer {
             .engine_version(0)
             .api_version(vk::make_api_version(0, 1, 0, 0));
         let mut extension_names =
-            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())
+            ash_window::enumerate_required_extensions(window.raw_display_handle)
                 .unwrap()
                 .to_vec();
         extension_names.push(debug_utils::NAME.as_ptr());
@@ -196,18 +196,18 @@ impl Renderer {
     unsafe fn create_surface(
         entry: &Entry,
         instance: &Instance,
-        window: &winit::window::Window,
+        window: &Window,
         pdevices: &[ash::vk::PhysicalDevice],
         surface_loader: &surface::Instance,
     ) -> Result<(EngineSurface, vk::PhysicalDevice, u32), Box<dyn Error>> {
         let surface = ash_window::create_surface(
             entry,
             instance,
-            window.display_handle()?.as_raw(),
-            window.window_handle()?.as_raw(),
+            window.raw_display_handle,
+            window.raw_window_handle,
             None,
         )
-        .unwrap();
+        .expect("Surface creation error");
 
         let (pdevice, queue_family_index) = pdevices
             .iter()
