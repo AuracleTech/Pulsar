@@ -1,13 +1,23 @@
+use crate::input_manager::InputState;
+use crate::model::{Mesh, Vertex};
+use crate::shaders::Shader;
 use crate::vulkan::debug_callback::DebugUtils;
-use crate::{Renderer, UserEvent};
-use ash::vk::PhysicalDevice;
+use crate::vulkan::record::record_submit_commandbuffer;
+use crate::vulkan::surface::{AAAResources, AAASurface};
+use crate::{find_memorytype_index, UserEvent};
+use ash::khr::{surface, swapchain};
+use ash::util::Align;
+use ash::vk::{self, PhysicalDevice};
 use ash::Entry;
 use cursor_icon::CursorIcon;
+use glam::Mat4;
 use log::info;
+use rand::Rng;
 use rwh_06::HasDisplayHandle;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::{fmt, mem, thread};
 use winit::application::ApplicationHandler;
@@ -27,6 +37,7 @@ use winit::platform::startup_notify::{
     self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify, WindowExtStartupNotify,
 };
 
+const WIN_TITLE: &str = "Pulsar";
 /// The amount of points to around the window for drag resize direction calculations.
 const BORDER_SIZE: f64 = 20.;
 pub const WIN_START_INNER_SIZE: PhysicalSize<u32> = PhysicalSize::new(1280, 720);
@@ -41,15 +52,22 @@ pub struct Application {
 
     entry: Entry,
     instance: ash::Instance,
-    surface_loader: ash::khr::surface::Instance,
+    surface_loader: surface::Instance,
     #[cfg(debug_assertions)]
     debug_utils: DebugUtils,
 
     physical_device_list: Vec<PhysicalDevice>,
+
+    input_state: Arc<InputState>,
 }
 
 impl Application {
     pub fn new<T>(event_loop: &EventLoop<T>) -> Result<Self, Box<dyn Error>> {
+        env_logger::init();
+
+        #[cfg(debug_assertions)]
+        Shader::compile_shaders();
+
         // You'll have to choose an icon size at your own discretion. On X11, the desired size
         // varies by WM, and on Windows, you still have to account for screen scaling. Here
         // we use 32px, since it seems to work well enough in most cases. Be careful about
@@ -104,6 +122,8 @@ impl Application {
             #[cfg(debug_assertions)]
             debug_utils,
             physical_device_list,
+
+            input_state: Arc::new(Default::default()),
         })
     }
 
@@ -116,7 +136,7 @@ impl Application {
 
         #[allow(unused_mut)]
         let mut window_attributes = Window::default_attributes()
-            .with_title("Winit window")
+            .with_title(WIN_TITLE)
             .with_transparent(true)
             .with_window_icon(Some(self.icon.clone()))
             .with_inner_size(WIN_START_INNER_SIZE);
@@ -159,7 +179,7 @@ impl Application {
         // info!("Executing action: {action:?}");
         match action {
             Action::CloseWindow => {
-                let _ = self.windows.remove(&window_id);
+                self.windows.remove(&window_id).unwrap();
             }
             Action::CreateNewWindow => {
                 #[cfg(any(x11_platform, wayland_platform))]
@@ -290,12 +310,10 @@ impl Application {
 
 impl Drop for Application {
     fn drop(&mut self) {
+        #[cfg(debug_assertions)]
         self.debug_utils.destroy();
 
         unsafe {
-            // self.surface_loader
-            //     .destroy_surface(self.surface.surface_khr, None);
-
             self.instance.destroy_instance(None);
         }
     }
@@ -341,7 +359,9 @@ impl ApplicationHandler<UserEvent> for Application {
             }
             WindowEvent::CloseRequested => {
                 info!("Closing Window={window_id:?}");
-                self.windows.remove(&window_id);
+                let window_state = self.windows.remove(&window_id).unwrap();
+                window_state.rendering.store(false, Ordering::Relaxed);
+                window_state.render_handle.unwrap().join().unwrap();
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 window.modifiers = modifiers.state();
@@ -471,16 +491,501 @@ impl ApplicationHandler<UserEvent> for Application {
         let window_state = self.windows.get_mut(&window_id).unwrap();
 
         // TEMP
-        let mut renderer = if let Some(receiver) = window_state.renderer_receiver.take() {
-            Renderer::new(&window_state.window, receiver).expect("failed to create engine")
-        } else {
-            panic!("Thread communication channel is missing");
-        };
-        thread::spawn(move || loop {
-            renderer.render();
-        });
+        let surface = window_state.surface.take().unwrap();
 
-        // self.print_help();
+        let device = crate::vulkan::device::create_device(
+            &self.instance,
+            surface.physical_device,
+            surface.queue_family_index,
+        )
+        .unwrap();
+
+        let swapchain_loader = swapchain::Device::new(&self.instance, &device);
+
+        // TODO get from os window api for linux and possibly more
+        let size = surface.capabilities.current_extent;
+
+        let swapchain = crate::vulkan::swapchain::AAASwapchain::new(
+            &device,
+            &self.surface_loader,
+            &surface,
+            surface.physical_device,
+            surface.queue_family_index,
+            size.width,
+            size.height,
+            &swapchain_loader,
+        )
+        .unwrap();
+
+        let (draw_commands_reuse_fence, setup_commands_reuse_fence) =
+            crate::vulkan::fence_semaphores::create_fences(&device).unwrap();
+
+        let (
+            present_images,
+            present_image_views,
+            depth_image_view,
+            depth_image,
+            depth_image_memory,
+            device_memory_properties,
+        ) = crate::vulkan::views::create_views_and_depth(
+            &device,
+            &self.instance,
+            &swapchain,
+            &surface,
+            &surface.physical_device,
+            &swapchain_loader,
+        );
+
+        let (present_complete_semaphore, rendering_complete_semaphore) =
+            crate::vulkan::fence_semaphores::create_semaphores(&device).unwrap();
+
+        let renderpass = crate::vulkan::renderpass::create_renderpass(&surface, &device).unwrap();
+
+        let (descriptor_pool, descriptor_sets, desc_set_layouts) =
+            crate::vulkan::descriptor_set::create_descriptor_set(&device);
+
+        let (
+            graphic_pipeline,
+            viewports,
+            scissors,
+            graphics_pipelines,
+            pipeline_layout,
+            vertex_shader_module,
+            fragment_shader_module,
+        ) = crate::vulkan::pipeline::create_pipeline(
+            &device,
+            &surface,
+            renderpass,
+            desc_set_layouts,
+        );
+
+        let framebuffers = crate::vulkan::framebuffer::create_framebuffers(
+            &device,
+            &surface,
+            &present_image_views,
+            depth_image_view,
+            renderpass,
+        )
+        .unwrap();
+
+        let pool =
+            crate::vulkan::command_pools::create_command_pools(&device, surface.queue_family_index)
+                .unwrap();
+
+        let (setup_command_buffer, draw_command_buffer) =
+            crate::vulkan::command_buffers::create_command_buffers(&device, pool).unwrap();
+
+        crate::vulkan::record::record_submit_commandbuffer(
+            &device,
+            setup_command_buffer,
+            setup_commands_reuse_fence,
+            swapchain.present_queue,
+            &[],
+            &[],
+            &[],
+            |device, setup_command_buffer| {
+                let layout_transition_barriers = vk::ImageMemoryBarrier::default()
+                    .image(depth_image)
+                    .dst_access_mask(
+                        vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                            | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                    )
+                    .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                            .layer_count(1)
+                            .level_count(1),
+                    );
+
+                unsafe {
+                    device.cmd_pipeline_barrier(
+                        setup_command_buffer,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[layout_transition_barriers],
+                    )
+                };
+            },
+        );
+
+        // MARK: UNIFORM BUFFER
+        let mut uniform = Mat4::IDENTITY;
+        // TEMP: rotate UBO transfrom
+        uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
+
+        let (uniform_color_buffer, uniform_color_buffer_memory) =
+            crate::vulkan::uniform::create_uniform_buffer(
+                &device,
+                &device_memory_properties,
+                uniform,
+            );
+
+        // MARK: IMAGE
+        let image = image::load_from_memory(include_bytes!("../assets/img/picture.png"))
+            .unwrap()
+            .to_rgba8();
+        let (width, height) = image.dimensions();
+        let image_extent = vk::Extent2D { width, height };
+        let image_data = image.into_raw();
+        let image_buffer_info = vk::BufferCreateInfo {
+            size: (mem::size_of::<u8>() * image_data.len()) as u64,
+            usage: vk::BufferUsageFlags::TRANSFER_SRC,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        let image_buffer = unsafe { device.create_buffer(&image_buffer_info, None).unwrap() };
+        let image_buffer_memory_req =
+            unsafe { device.get_buffer_memory_requirements(image_buffer) };
+        let image_buffer_memory_index = find_memorytype_index(
+            &image_buffer_memory_req,
+            &device_memory_properties,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )
+        .expect("Unable to find suitable memorytype for the image buffer.");
+
+        let image_buffer_allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: image_buffer_memory_req.size,
+            memory_type_index: image_buffer_memory_index,
+            ..Default::default()
+        };
+        let image_buffer_memory = unsafe {
+            device
+                .allocate_memory(&image_buffer_allocate_info, None)
+                .unwrap()
+        };
+        let image_ptr = unsafe {
+            device
+                .map_memory(
+                    image_buffer_memory,
+                    0,
+                    image_buffer_memory_req.size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap()
+        };
+        let mut image_slice = unsafe {
+            Align::new(
+                image_ptr,
+                mem::align_of::<u8>() as u64,
+                image_buffer_memory_req.size,
+            )
+        };
+        image_slice.copy_from_slice(&image_data);
+        unsafe {
+            device.unmap_memory(image_buffer_memory);
+            device
+                .bind_buffer_memory(image_buffer, image_buffer_memory, 0)
+                .unwrap();
+        }
+
+        // MARK: TEXTURE
+        let texture_create_info = vk::ImageCreateInfo {
+            image_type: vk::ImageType::TYPE_2D,
+            format: vk::Format::R8G8B8A8_UNORM,
+            extent: image_extent.into(),
+            mip_levels: 1,
+            array_layers: 1,
+            samples: vk::SampleCountFlags::TYPE_1,
+            tiling: vk::ImageTiling::OPTIMAL,
+            usage: vk::ImageUsageFlags::TRANSFER_DST | vk::ImageUsageFlags::SAMPLED,
+            sharing_mode: vk::SharingMode::EXCLUSIVE,
+            ..Default::default()
+        };
+        let texture_image = unsafe { device.create_image(&texture_create_info, None).unwrap() };
+        let texture_memory_req = unsafe { device.get_image_memory_requirements(texture_image) };
+        let texture_memory_index = find_memorytype_index(
+            &texture_memory_req,
+            &device_memory_properties,
+            vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        )
+        .expect("Unable to find suitable memory index for depth image.");
+
+        let texture_allocate_info = vk::MemoryAllocateInfo {
+            allocation_size: texture_memory_req.size,
+            memory_type_index: texture_memory_index,
+            ..Default::default()
+        };
+        let texture_memory = unsafe {
+            device
+                .allocate_memory(&texture_allocate_info, None)
+                .unwrap()
+        };
+        unsafe {
+            device
+                .bind_image_memory(texture_image, texture_memory, 0)
+                .expect("Unable to bind depth image memory")
+        };
+
+        // MARK: REC TEXTURE
+        record_submit_commandbuffer(
+            &device,
+            setup_command_buffer,
+            setup_commands_reuse_fence,
+            swapchain.present_queue,
+            &[],
+            &[],
+            &[],
+            |device, texture_command_buffer| {
+                let texture_barrier = vk::ImageMemoryBarrier {
+                    dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+                    new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    image: texture_image,
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        level_count: 1,
+                        layer_count: 1,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                unsafe {
+                    device.cmd_pipeline_barrier(
+                        texture_command_buffer,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[texture_barrier],
+                    )
+                };
+                let buffer_copy_regions = vk::BufferImageCopy::default()
+                    .image_subresource(
+                        vk::ImageSubresourceLayers::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .layer_count(1),
+                    )
+                    .image_extent(image_extent.into());
+
+                unsafe {
+                    device.cmd_copy_buffer_to_image(
+                        texture_command_buffer,
+                        image_buffer,
+                        texture_image,
+                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                        &[buffer_copy_regions],
+                    )
+                };
+                let texture_barrier_end = vk::ImageMemoryBarrier {
+                    src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+                    dst_access_mask: vk::AccessFlags::SHADER_READ,
+                    old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                    image: texture_image,
+                    subresource_range: vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        level_count: 1,
+                        layer_count: 1,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                unsafe {
+                    device.cmd_pipeline_barrier(
+                        texture_command_buffer,
+                        vk::PipelineStageFlags::TRANSFER,
+                        vk::PipelineStageFlags::FRAGMENT_SHADER,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[texture_barrier_end],
+                    )
+                };
+            },
+        );
+
+        // MARK: SAMPLER
+        let sampler_info = vk::SamplerCreateInfo {
+            mag_filter: vk::Filter::LINEAR,
+            min_filter: vk::Filter::LINEAR,
+            mipmap_mode: vk::SamplerMipmapMode::LINEAR,
+            address_mode_u: vk::SamplerAddressMode::MIRRORED_REPEAT,
+            address_mode_v: vk::SamplerAddressMode::MIRRORED_REPEAT,
+            address_mode_w: vk::SamplerAddressMode::MIRRORED_REPEAT,
+            max_anisotropy: 1.0,
+            border_color: vk::BorderColor::FLOAT_OPAQUE_WHITE,
+            compare_op: vk::CompareOp::NEVER,
+            ..Default::default()
+        };
+
+        let texture_sampler = unsafe { device.create_sampler(&sampler_info, None).unwrap() };
+
+        // MARK: TEXTURE VIEW
+        let tex_image_view_info = vk::ImageViewCreateInfo {
+            view_type: vk::ImageViewType::TYPE_2D,
+            format: texture_create_info.format,
+            components: vk::ComponentMapping {
+                r: vk::ComponentSwizzle::R,
+                g: vk::ComponentSwizzle::G,
+                b: vk::ComponentSwizzle::B,
+                a: vk::ComponentSwizzle::A,
+            },
+            subresource_range: vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                level_count: 1,
+                layer_count: 1,
+                ..Default::default()
+            },
+            image: texture_image,
+            ..Default::default()
+        };
+        let tex_image_view = unsafe {
+            device
+                .create_image_view(&tex_image_view_info, None)
+                .unwrap()
+        };
+
+        let uniform_color_buffer_descriptor = vk::DescriptorBufferInfo {
+            buffer: uniform_color_buffer,
+            offset: 0,
+            range: mem::size_of_val(&uniform) as u64,
+        };
+
+        let tex_descriptor = vk::DescriptorImageInfo {
+            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            image_view: tex_image_view,
+            sampler: texture_sampler,
+        };
+
+        let write_desc_sets = [
+            vk::WriteDescriptorSet {
+                dst_set: descriptor_sets[0],
+                descriptor_count: 1,
+                descriptor_type: vk::DescriptorType::UNIFORM_BUFFER,
+                p_buffer_info: &uniform_color_buffer_descriptor,
+                ..Default::default()
+            },
+            vk::WriteDescriptorSet {
+                dst_set: descriptor_sets[0],
+                dst_binding: 1,
+                descriptor_count: 1,
+                descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+                p_image_info: &tex_descriptor,
+                ..Default::default()
+            },
+        ];
+        unsafe { device.update_descriptor_sets(&write_desc_sets, &[]) };
+
+        // MARK: MESHES
+        // TODO seeded RNG only
+        let mut rng = rand::thread_rng();
+
+        let mut registered_meshes = Vec::new();
+
+        for _ in 0..5 {
+            let mut vertices = Vec::new();
+            let mut indices = Vec::new();
+            for _ in 0..10 {
+                let x = rng.gen_range(-1.0..1.0);
+                let y = rng.gen_range(-1.0..1.0);
+
+                vertices.extend(
+                    [
+                        Vertex {
+                            pos: [x, y, 1.0, 1.0],
+                            uv: [0.0, 0.0],
+                        },
+                        Vertex {
+                            pos: [x + 0.1, y, 1.0, 1.0],
+                            uv: [0.0, 1.0],
+                        },
+                        Vertex {
+                            pos: [x + 0.1, y - 0.1, 1.0, 1.0],
+                            uv: [1.0, 1.0],
+                        },
+                        Vertex {
+                            pos: [x, y - 0.1, 1.0, 1.0],
+                            uv: [1.0, 0.0],
+                        },
+                    ]
+                    .iter(),
+                );
+
+                let offset = vertices.len() as u32 - 4;
+                let quad_indices = vec![
+                    offset,
+                    offset + 1,
+                    offset + 2,
+                    offset,
+                    offset + 2,
+                    offset + 3,
+                ];
+
+                indices.extend(quad_indices);
+            }
+            let mesh = Mesh { vertices, indices };
+            let registered_mesh = mesh.register(&device, &device_memory_properties);
+            registered_meshes.push(registered_mesh);
+        }
+
+        // MARK: SQUARE
+        let square = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: [-1.0, -1.0, 0.0, 1.0],
+                    uv: [0.0, 0.0],
+                },
+                Vertex {
+                    pos: [-1.0, 1.0, 0.0, 1.0],
+                    uv: [0.0, 1.0],
+                },
+                Vertex {
+                    pos: [1.0, 1.0, 0.0, 1.0],
+                    uv: [1.0, 1.0],
+                },
+                Vertex {
+                    pos: [1.0, -1.0, 0.0, 1.0],
+                    uv: [1.0, 0.0],
+                },
+            ],
+            indices: vec![0u32, 1, 2, 2, 3, 0],
+        };
+        let registered_square = square.register(&device, &device_memory_properties);
+        registered_meshes.push(registered_square);
+
+        let swapchain_resources = AAAResources {
+            pool,
+            draw_command_buffer,
+            setup_command_buffer,
+            depth_image,
+            depth_image_view,
+            depth_image_memory,
+            draw_commands_reuse_fence,
+            setup_commands_reuse_fence,
+            present_complete_semaphore,
+            rendering_complete_semaphore,
+            present_images,
+            present_image_views,
+        };
+
+        let rendering_clone = window_state.rendering.clone();
+
+        window_state.render_handle = Some(thread::spawn(move || {
+            surface.render(
+                rendering_clone,
+                &swapchain,
+                &swapchain_resources,
+                &device,
+                &swapchain_loader,
+                renderpass,
+                &framebuffers,
+                &viewports,
+                &scissors,
+                &descriptor_sets,
+                pipeline_layout,
+                graphic_pipeline,
+                &registered_meshes,
+                vertex_shader_module,
+                fragment_shader_module,
+            )
+        }));
+
+        self.print_help();
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -529,10 +1034,12 @@ struct WindowState {
     named_idx: usize,
     custom_idx: usize,
     cursor_hidden: bool,
-    // swapchain: AppSwapchain,
-}
 
-struct AppSwapchain {}
+    // Render
+    surface: Option<AAASurface>, // TODO return to
+    rendering: Arc<AtomicBool>,
+    render_handle: Option<thread::JoinHandle<()>>,
+}
 
 impl WindowState {
     fn new(
@@ -552,6 +1059,15 @@ impl WindowState {
         let ime = true;
         window.set_ime_allowed(ime);
 
+        let surface = crate::vulkan::surface::AAASurface::new(
+            &app.entry,
+            &app.instance,
+            &window,
+            &app.physical_device_list,
+            &app.surface_loader,
+        )
+        .unwrap();
+
         Ok(Self {
             #[cfg(macos_platform)]
             option_as_alt: window.option_as_alt(),
@@ -570,6 +1086,9 @@ impl WindowState {
             rotated: Default::default(),
             panned: Default::default(),
             zoom: Default::default(),
+            render_handle: Default::default(),
+            rendering: Arc::new(AtomicBool::new(true)),
+            surface: Some(surface),
         })
     }
 
@@ -900,21 +1419,16 @@ fn load_icon(bytes: &[u8]) -> Icon {
 }
 
 fn modifiers_to_string(mods: ModifiersState) -> String {
-    let mut mods_line = String::new();
-    // Always add + since it's printed as a part of the bindings.
-    for (modifier, desc) in [
+    [
         (ModifiersState::SUPER, "Super+"),
         (ModifiersState::ALT, "Alt+"),
         (ModifiersState::CONTROL, "Ctrl+"),
         (ModifiersState::SHIFT, "Shift+"),
-    ] {
-        if !mods.contains(modifier) {
-            continue;
-        }
-
-        mods_line.push_str(desc);
-    }
-    mods_line
+    ]
+    .iter()
+    .filter(|(modifier, _)| mods.contains(*modifier))
+    .map(|(_, desc)| *desc)
+    .collect::<String>()
 }
 
 fn mouse_button_to_string(button: MouseButton) -> &'static str {
@@ -924,11 +1438,10 @@ fn mouse_button_to_string(button: MouseButton) -> &'static str {
         MouseButton::Middle => "MMB",
         MouseButton::Back => "Back",
         MouseButton::Forward => "Forward",
-        MouseButton::Other(_) => "",
+        MouseButton::Other(_) => "Other",
     }
 }
 
-/// Cursor list to cycle through.
 const CURSORS: &[CursorIcon] = &[
     CursorIcon::Default,
     CursorIcon::Crosshair,
