@@ -248,15 +248,6 @@ impl AAASurface {
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
 
-            // TEMP
-            // TEMP
-            // TEMP
-            // TEMP
-            std::thread::sleep(std::time::Duration::from_millis(150));
-            // TEMP
-            // TEMP
-            // TEMP
-
             metrics.end_frame();
         }
 
