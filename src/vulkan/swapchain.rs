@@ -1,7 +1,7 @@
 use super::surface::AAASurface;
 use ash::{
     khr::{surface, swapchain},
-    vk, Device,
+    vk,
 };
 use std::error::Error;
 
@@ -14,7 +14,7 @@ pub struct AAASwapchain {
 
 impl AAASwapchain {
     pub fn new(
-        device: &Device,
+        device: &ash::Device,
         surface_loader: &surface::Instance,
         surface: &AAASurface,
         pdevice: vk::PhysicalDevice,
@@ -84,3 +84,23 @@ impl AAASwapchain {
         })
     }
 }
+
+// impl Drop for AAASwapchain {
+//     fn drop(&mut self) {
+//         for &framebuffer in self.framebuffers.iter() {
+//             self.device.destroy_framebuffer(framebuffer, None);
+//         }
+//         for &image_view in self.swapchain_resources.present_image_views.iter() {
+//             self.device.destroy_image_view(image_view, None);
+//         }
+//         self.swapchain_loader
+//             .destroy_swapchain(self.swapchain.swapchain_khr, None);
+
+//         self.device
+//             .free_memory(self.swapchain_resources.depth_image_memory, None);
+//         self.device
+//             .destroy_image_view(self.swapchain_resources.depth_image_view, None);
+//         self.device
+//             .destroy_image(self.swapchain_resources.depth_image, None);
+//     }
+// }

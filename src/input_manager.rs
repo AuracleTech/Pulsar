@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32};
 use std::sync::Arc;
 
 pub struct InputState {

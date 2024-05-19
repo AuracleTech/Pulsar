@@ -1,5 +1,6 @@
 pub mod app;
 mod debugging;
+#[allow(dead_code, unused_variables)] // TEMP
 mod input_manager;
 mod metrics;
 mod model;
@@ -194,131 +195,131 @@ impl Renderer {
         device.unmap_memory(uniform_buffer_memory);
     }
 
-    #[profiling::function]
-    pub fn render(&mut self) {
-        self.process_all_events();
+    // #[profiling::function]
+    // pub fn render(&mut self) {
+    //     self.process_all_events();
 
-        self.metrics.start_frame();
-        let delta = self.metrics.delta_start_to_start;
+    //     self.metrics.start_frame();
+    //     let delta = self.metrics.delta_start_to_start;
 
-        if self.minimized {
-            return;
-        }
+    //     if self.minimized {
+    //         return;
+    //     }
 
-        self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
+    //     self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
 
-        unsafe {
-            Renderer::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
+    //     unsafe {
+    //         Renderer::update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
 
-            let result = self.swapchain_loader.acquire_next_image(
-                self.swapchain.swapchain_khr,
-                u64::MAX,
-                self.swapchain_resources.present_complete_semaphore,
-                vk::Fence::null(),
-            );
-            let (present_index, _) = match result {
-                Ok(result) => result,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return self.outdated_swapchain(),
-                Err(err) => panic!("Failed to acquire next image: {:?}", err),
-            };
-            let clear_values = [
-                vk::ClearValue {
-                    color: vk::ClearColorValue {
-                        float32: [0.0, 0.0, 0.0, 0.0],
-                    },
-                },
-                vk::ClearValue {
-                    depth_stencil: vk::ClearDepthStencilValue {
-                        depth: 1.0,
-                        stencil: 0,
-                    },
-                },
-            ];
+    //         let result = self.swapchain_loader.acquire_next_image(
+    //             self.swapchain.swapchain_khr,
+    //             u64::MAX,
+    //             self.swapchain_resources.present_complete_semaphore,
+    //             vk::Fence::null(),
+    //         );
+    //         let (present_index, _) = match result {
+    //             Ok(result) => result,
+    //             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return self.outdated_swapchain(),
+    //             Err(err) => panic!("Failed to acquire next image: {:?}", err),
+    //         };
+    //         let clear_values = [
+    //             vk::ClearValue {
+    //                 color: vk::ClearColorValue {
+    //                     float32: [0.0, 0.0, 0.0, 0.0],
+    //                 },
+    //             },
+    //             vk::ClearValue {
+    //                 depth_stencil: vk::ClearDepthStencilValue {
+    //                     depth: 1.0,
+    //                     stencil: 0,
+    //                 },
+    //             },
+    //         ];
 
-            let render_pass_begin_info = vk::RenderPassBeginInfo::default()
-                .render_pass(self.renderpass)
-                .framebuffer(self.framebuffers[present_index as usize])
-                .render_area(self.surface.resolution.into())
-                .clear_values(&clear_values);
+    //         let render_pass_begin_info = vk::RenderPassBeginInfo::default()
+    //             .render_pass(self.renderpass)
+    //             .framebuffer(self.framebuffers[present_index as usize])
+    //             .render_area(self.surface.resolution.into())
+    //             .clear_values(&clear_values);
 
-            record_submit_commandbuffer(
-                &self.device,
-                self.swapchain_resources.draw_command_buffer,
-                self.swapchain_resources.draw_commands_reuse_fence,
-                self.swapchain.present_queue,
-                &[vk::PipelineStageFlags::BOTTOM_OF_PIPE],
-                &[self.swapchain_resources.present_complete_semaphore],
-                &[self.swapchain_resources.rendering_complete_semaphore],
-                |device, draw_command_buffer| {
-                    device.cmd_begin_render_pass(
-                        draw_command_buffer,
-                        &render_pass_begin_info,
-                        vk::SubpassContents::INLINE,
-                    );
-                    device.cmd_bind_descriptor_sets(
-                        draw_command_buffer,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.pipeline_layout,
-                        0,
-                        &self.descriptor_sets,
-                        &[],
-                    );
-                    device.cmd_bind_pipeline(
-                        draw_command_buffer,
-                        vk::PipelineBindPoint::GRAPHICS,
-                        self.graphic_pipeline,
-                    );
-                    device.cmd_set_viewport(draw_command_buffer, 0, &self.viewports);
-                    device.cmd_set_scissor(draw_command_buffer, 0, &self.scissors);
+    //         record_submit_commandbuffer(
+    //             &self.device,
+    //             self.swapchain_resources.draw_command_buffer,
+    //             self.swapchain_resources.draw_commands_reuse_fence,
+    //             self.swapchain.present_queue,
+    //             &[vk::PipelineStageFlags::BOTTOM_OF_PIPE],
+    //             &[self.swapchain_resources.present_complete_semaphore],
+    //             &[self.swapchain_resources.rendering_complete_semaphore],
+    //             |device, draw_command_buffer| {
+    //                 device.cmd_begin_render_pass(
+    //                     draw_command_buffer,
+    //                     &render_pass_begin_info,
+    //                     vk::SubpassContents::INLINE,
+    //                 );
+    //                 device.cmd_bind_descriptor_sets(
+    //                     draw_command_buffer,
+    //                     vk::PipelineBindPoint::GRAPHICS,
+    //                     self.pipeline_layout,
+    //                     0,
+    //                     &self.descriptor_sets,
+    //                     &[],
+    //                 );
+    //                 device.cmd_bind_pipeline(
+    //                     draw_command_buffer,
+    //                     vk::PipelineBindPoint::GRAPHICS,
+    //                     self.graphic_pipeline,
+    //                 );
+    //                 device.cmd_set_viewport(draw_command_buffer, 0, &self.viewports);
+    //                 device.cmd_set_scissor(draw_command_buffer, 0, &self.scissors);
 
-                    for registered_mesh in &self.registered_meshes {
-                        device.cmd_bind_vertex_buffers(
-                            draw_command_buffer,
-                            0,
-                            &[registered_mesh.vertex_buffer],
-                            &[0],
-                        );
-                        device.cmd_bind_index_buffer(
-                            draw_command_buffer,
-                            registered_mesh.index_buffer,
-                            0,
-                            vk::IndexType::UINT32,
-                        );
-                        device.cmd_draw_indexed(
-                            draw_command_buffer,
-                            registered_mesh.mesh.indices.len() as u32,
-                            1,
-                            0,
-                            0,
-                            1,
-                        );
-                    }
+    //                 for registered_mesh in &self.registered_meshes {
+    //                     device.cmd_bind_vertex_buffers(
+    //                         draw_command_buffer,
+    //                         0,
+    //                         &[registered_mesh.vertex_buffer],
+    //                         &[0],
+    //                     );
+    //                     device.cmd_bind_index_buffer(
+    //                         draw_command_buffer,
+    //                         registered_mesh.index_buffer,
+    //                         0,
+    //                         vk::IndexType::UINT32,
+    //                     );
+    //                     device.cmd_draw_indexed(
+    //                         draw_command_buffer,
+    //                         registered_mesh.mesh.indices.len() as u32,
+    //                         1,
+    //                         0,
+    //                         0,
+    //                         1,
+    //                     );
+    //                 }
 
-                    // Or draw without the index buffer
-                    // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
-                    device.cmd_end_render_pass(draw_command_buffer);
-                },
-            );
-            let wait_semaphors = [self.swapchain_resources.rendering_complete_semaphore];
-            let swapchains = [self.swapchain.swapchain_khr];
-            let image_indices = [present_index];
-            let present_info = vk::PresentInfoKHR::default()
-                .wait_semaphores(&wait_semaphors)
-                .swapchains(&swapchains)
-                .image_indices(&image_indices);
-            let queue_present_result = self
-                .swapchain_loader
-                .queue_present(self.swapchain.present_queue, &present_info);
+    //                 // Or draw without the index buffer
+    //                 // device.cmd_draw(draw_command_buffer, 3, 1, 0, 0);
+    //                 device.cmd_end_render_pass(draw_command_buffer);
+    //             },
+    //         );
+    //         let wait_semaphors = [self.swapchain_resources.rendering_complete_semaphore];
+    //         let swapchains = [self.swapchain.swapchain_khr];
+    //         let image_indices = [present_index];
+    //         let present_info = vk::PresentInfoKHR::default()
+    //             .wait_semaphores(&wait_semaphors)
+    //             .swapchains(&swapchains)
+    //             .image_indices(&image_indices);
+    //         let queue_present_result = self
+    //             .swapchain_loader
+    //             .queue_present(self.swapchain.present_queue, &present_info);
 
-            match queue_present_result {
-                Ok(_) => {}
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.outdated_swapchain(),
-                Err(err) => panic!("Failed to present queue: {:?}", err),
-            }
-        }
+    //         match queue_present_result {
+    //             Ok(_) => {}
+    //             Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => self.outdated_swapchain(),
+    //             Err(err) => panic!("Failed to present queue: {:?}", err),
+    //         }
+    //     }
 
-        self.metrics.end_frame();
-    }
+    //     self.metrics.end_frame();
+    // }
 
     pub fn start_update_thread(&self) -> JoinHandle<()> {
         std::thread::spawn(move || {
@@ -326,23 +327,23 @@ impl Renderer {
         })
     }
 
-    fn outdated_swapchain(&mut self) {
-        self.process_all_events();
-    }
+    // fn outdated_swapchain(&mut self) {
+    //     self.process_all_events();
+    // }
 
-    pub fn process_all_events(&mut self) {
-        loop {
-            match self.receiver.try_recv() {
-                Ok(event) => match event {
-                    UserEvent::Resize { width, height } => {
-                        println!("Processed resize event: {}x{}", width, height);
-                        self.recreate_swapchain(width, height);
-                    }
-                },
-                _ => break,
-            }
-        }
-    }
+    // pub fn process_all_events(&mut self) {
+    //     loop {
+    //         match self.receiver.try_recv() {
+    //             Ok(event) => match event {
+    //                 UserEvent::Resize { width, height } => {
+    //                     println!("Processed resize event: {}x{}", width, height);
+    //                     self.recreate_swapchain(width, height);
+    //                 }
+    //             },
+    //             _ => break,
+    //         }
+    //     }
+    // }
 
     // pub fn recreate_swapchain(&mut self, width: u32, height: u32) {
     //     if width == 0 || height == 0 {

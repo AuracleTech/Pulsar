@@ -14,3 +14,7 @@ pub mod surface;
 pub mod swapchain;
 pub mod uniform;
 pub mod views;
+
+trait Destroy {
+    fn destroy(&mut self);
+}

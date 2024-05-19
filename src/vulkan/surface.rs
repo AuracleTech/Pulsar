@@ -1,8 +1,9 @@
+use super::swapchain::AAASwapchain;
+use crate::{metrics::Metrics, model::RegisteredMesh};
 use ash::{
     khr::{surface, swapchain},
-    msft, vk, Entry,
+    vk, Entry,
 };
-use log::info;
 use rwh_06::{HasDisplayHandle, HasWindowHandle};
 use std::{
     error::Error,
@@ -11,10 +12,6 @@ use std::{
         Arc,
     },
 };
-
-use crate::{metrics::Metrics, model::RegisteredMesh};
-
-use super::swapchain::AAASwapchain;
 
 pub struct AAASurface {
     pub surface_khr: vk::SurfaceKHR,
@@ -251,72 +248,54 @@ impl AAASurface {
             metrics.end_frame();
         }
 
-        // unsafe {
-        //     device.device_wait_idle().unwrap();
+        unsafe {
+            device.device_wait_idle().unwrap();
 
-        //     device.destroy_shader_module(vertex_shader_module, None);
-        //     device.destroy_shader_module(fragment_shader_module, None);
+            device.destroy_shader_module(vertex_shader_module, None);
+            device.destroy_shader_module(fragment_shader_module, None);
 
-        //     device.free_memory(image_buffer_memory, None);
-        //     device.destroy_buffer(image_buffer, None);
-        //     device.free_memory(texture_memory, None);
-        //     device.destroy_image_view(tex_image_view, None);
-        //     device.destroy_image(texture_image, None);
+            // device.free_memory(image_buffer_memory, None);
+            // device.destroy_buffer(image_buffer, None);
+            // device.free_memory(texture_memory, None);
+            // device.destroy_image_view(tex_image_view, None);
+            // device.destroy_image(texture_image, None);
 
-        //     for registered_mesh in registered_meshes.iter() {
-        //         device.free_memory(registered_mesh.index_buffer_memory, None);
-        //         device.destroy_buffer(registered_mesh.index_buffer, None);
-        //         device.free_memory(registered_mesh.vertex_buffer_memory, None);
-        //         device.destroy_buffer(registered_mesh.vertex_buffer, None);
-        //     }
+            for registered_mesh in registered_meshes.iter() {
+                device.free_memory(registered_mesh.index_buffer_memory, None);
+                device.destroy_buffer(registered_mesh.index_buffer, None);
+                device.free_memory(registered_mesh.vertex_buffer_memory, None);
+                device.destroy_buffer(registered_mesh.vertex_buffer, None);
+            }
 
-        //     for &descriptor_set_layout in desc_set_layouts.iter() {
-        //         device.destroy_descriptor_set_layout(descriptor_set_layout, None);
-        //     }
-        //     device.destroy_descriptor_pool(descriptor_pool, None);
-        //     device.destroy_sampler(texture_sampler, None);
+            // for &descriptor_set_layout in desc_set_layouts.iter() {
+            //     device.destroy_descriptor_set_layout(descriptor_set_layout, None);
+            // }
+            // device.destroy_descriptor_pool(descriptor_pool, None);
+            // device.destroy_sampler(texture_sampler, None);
 
-        //     device.free_memory(uniform_buffer_memory, None);
-        //     device.destroy_buffer(uniform_color_buffer, None);
+            // device.free_memory(uniform_buffer_memory, None);
+            // device.destroy_buffer(uniform_color_buffer, None);
 
-        //     self.destroy_swapchain();
+            // self.destroy_swapchain();
 
-        //     for &pipeline in graphics_pipelines.iter() {
-        //         device.destroy_pipeline(pipeline, None);
-        //     }
-        //     device.destroy_pipeline_layout(pipeline_layout, None);
+            // for &pipeline in graphics_pipelines.iter() {
+            //     device.destroy_pipeline(pipeline, None);
+            // }
+            device.destroy_pipeline_layout(pipeline_layout, None);
 
-        //     device.destroy_render_pass(renderpass, None);
+            device.destroy_render_pass(renderpass, None);
 
-        //     device.destroy_semaphore(swapchain_resources.present_complete_semaphore, None);
-        //     device.destroy_semaphore(swapchain_resources.rendering_complete_semaphore, None);
+            device.destroy_semaphore(swapchain_resources.present_complete_semaphore, None);
+            device.destroy_semaphore(swapchain_resources.rendering_complete_semaphore, None);
 
-        //     device.destroy_fence(swapchain_resources.draw_commands_reuse_fence, None);
-        //     device.destroy_fence(swapchain_resources.setup_commands_reuse_fence, None);
+            device.destroy_fence(swapchain_resources.draw_commands_reuse_fence, None);
+            device.destroy_fence(swapchain_resources.setup_commands_reuse_fence, None);
 
-        //     device.destroy_command_pool(swapchain_resources.pool, None);
+            device.destroy_command_pool(swapchain_resources.pool, None);
 
-        //     device.destroy_device(None);
+            device.destroy_device(None);
 
-        //     surface_loader.destroy_surface(self.surface_khr, None);
-        // }
+            // surface_loader.destroy_surface(self.surface_khr, None);
+        }
     }
-
-    // unsafe fn destroy_swapchain(&mut self) {
-    //     for &framebuffer in self.framebuffers.iter() {
-    //         self.device.destroy_framebuffer(framebuffer, None);
-    //     }
-    //     for &image_view in self.swapchain_resources.present_image_views.iter() {
-    //         self.device.destroy_image_view(image_view, None);
-    //     }
-    //     self.swapchain_loader
-    //         .destroy_swapchain(self.swapchain.swapchain_khr, None);
-
-    //     self.device
-    //         .free_memory(self.swapchain_resources.depth_image_memory, None);
-    //     self.device
-    //         .destroy_image_view(self.swapchain_resources.depth_image_view, None);
-    //     self.device
-    //         .destroy_image(self.swapchain_resources.depth_image, None);
-    // }
 }

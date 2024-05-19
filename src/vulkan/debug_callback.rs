@@ -2,6 +2,8 @@ use ash::{ext::debug_utils, vk, Entry};
 use log::debug;
 use std::{borrow::Cow, error::Error, ffi::CStr};
 
+use super::Destroy;
+
 pub struct DebugUtils {
     debug_utils_loader: ash::ext::debug_utils::Instance,
     debug_call_back: vk::DebugUtilsMessengerEXT,
@@ -35,6 +37,7 @@ impl DebugUtils {
     }
 
     pub fn destroy(&self) {
+        // FIX DUPE DUPE DUPE
         unsafe {
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_call_back, None);
@@ -69,5 +72,14 @@ pub extern "system" fn vulkan_debug_callback(
     );
 
         vk::FALSE
+    }
+}
+
+impl Destroy for DebugUtils {
+    fn destroy(&mut self) {
+        unsafe {
+            self.debug_utils_loader
+                .destroy_debug_utils_messenger(self.debug_call_back, None);
+        }
     }
 }
