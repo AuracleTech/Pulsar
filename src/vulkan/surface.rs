@@ -1,4 +1,4 @@
-use super::swapchain::AAASwapchain;
+use super::{swapchain::AAASwapchain, Destroy};
 use crate::{metrics::Metrics, model::RegisteredMesh};
 use ash::{
     khr::{surface, swapchain},
@@ -120,7 +120,7 @@ impl AAASurface {
         rendering: Arc<AtomicBool>,
         swapchain: &AAASwapchain,
         swapchain_resources: &AAAResources,
-        device: &ash::Device,
+        device: &mut ash::Device,
         swapchain_loader: &swapchain::Device,
         renderpass: vk::RenderPass,
         framebuffers: &[vk::Framebuffer],
@@ -293,7 +293,7 @@ impl AAASurface {
 
             device.destroy_command_pool(swapchain_resources.pool, None);
 
-            device.destroy_device(None);
+            device.destroy();
 
             // surface_loader.destroy_surface(self.surface_khr, None);
         }

@@ -494,7 +494,7 @@ impl ApplicationHandler<UserEvent> for Application {
         // TEMP
         let surface = window_state.surface.take().unwrap();
 
-        let device = crate::vulkan::device::create_device(
+        let mut device = crate::vulkan::device::create_device(
             &self.instance,
             surface.physical_device,
             surface.queue_family_index,
@@ -971,7 +971,7 @@ impl ApplicationHandler<UserEvent> for Application {
                 rendering_clone,
                 &swapchain,
                 &swapchain_resources,
-                &device,
+                &mut device,
                 &swapchain_loader,
                 renderpass,
                 &framebuffers,

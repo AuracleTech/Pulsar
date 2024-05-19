@@ -1,9 +1,6 @@
+use super::Destroy;
 use ash::{khr::swapchain, vk, Device};
 use std::error::Error;
-
-// pub struct AAADevice {
-//     pub device: Device,
-// }
 
 pub fn create_device(
     instance: &ash::Instance,
@@ -27,7 +24,7 @@ pub fn create_device(
         .queue_create_infos(std::slice::from_ref(&queue_info))
         .enabled_extension_names(&device_extension_names_raw)
         .enabled_features(&features);
-    let device: Device = unsafe {
+    let device = unsafe {
         instance
             .create_device(pdevice, &device_create_info, None)
             .unwrap()
@@ -36,10 +33,10 @@ pub fn create_device(
     Ok(device)
 }
 
-// impl Destroy for AAADevice {
-//     fn destroy(&mut self) {
-//         unsafe {
-//             self.device.destroy_device(None);
-//         }
-//     }
-// }
+impl Destroy for Device {
+    fn destroy(&mut self) {
+        unsafe {
+            self.destroy_device(None);
+        }
+    }
+}
