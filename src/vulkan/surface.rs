@@ -23,8 +23,6 @@ pub struct AAASurface {
 }
 
 pub struct AAAResources {
-    pub pool: vk::CommandPool,
-
     pub draw_command_buffer: vk::CommandBuffer,
     pub setup_command_buffer: vk::CommandBuffer,
 
@@ -117,6 +115,18 @@ impl AAASurface {
 
     pub fn render(
         &self,
+        image_buffer_memory: vk::DeviceMemory,
+        image_buffer: vk::Buffer,
+        texture_memory: vk::DeviceMemory,
+        tex_image_view: vk::ImageView,
+        texture_image: vk::Image,
+        desc_set_layouts: &[vk::DescriptorSetLayout],
+        descriptor_pool: vk::DescriptorPool,
+        texture_sampler: vk::Sampler,
+        uniform_color_buffer_memory: vk::DeviceMemory,
+        uniform_color_buffer: vk::Buffer,
+        graphics_pipelines: &[vk::Pipeline],
+        pool: vk::CommandPool,
         rendering: Arc<AtomicBool>,
         swapchain: &AAASwapchain,
         swapchain_resources: &AAAResources,
@@ -254,11 +264,11 @@ impl AAASurface {
             device.destroy_shader_module(vertex_shader_module, None);
             device.destroy_shader_module(fragment_shader_module, None);
 
-            // device.free_memory(image_buffer_memory, None);
-            // device.destroy_buffer(image_buffer, None);
-            // device.free_memory(texture_memory, None);
-            // device.destroy_image_view(tex_image_view, None);
-            // device.destroy_image(texture_image, None);
+            device.free_memory(image_buffer_memory, None);
+            device.destroy_buffer(image_buffer, None);
+            device.free_memory(texture_memory, None);
+            device.destroy_image_view(tex_image_view, None);
+            device.destroy_image(texture_image, None);
 
             for registered_mesh in registered_meshes.iter() {
                 device.free_memory(registered_mesh.index_buffer_memory, None);
@@ -267,20 +277,20 @@ impl AAASurface {
                 device.destroy_buffer(registered_mesh.vertex_buffer, None);
             }
 
-            // for &descriptor_set_layout in desc_set_layouts.iter() {
-            //     device.destroy_descriptor_set_layout(descriptor_set_layout, None);
-            // }
-            // device.destroy_descriptor_pool(descriptor_pool, None);
-            // device.destroy_sampler(texture_sampler, None);
+            for &descriptor_set_layout in desc_set_layouts.iter() {
+                device.destroy_descriptor_set_layout(descriptor_set_layout, None);
+            }
+            device.destroy_descriptor_pool(descriptor_pool, None);
+            device.destroy_sampler(texture_sampler, None);
 
-            // device.free_memory(uniform_buffer_memory, None);
-            // device.destroy_buffer(uniform_color_buffer, None);
+            device.free_memory(uniform_color_buffer_memory, None);
+            device.destroy_buffer(uniform_color_buffer, None);
 
             // self.destroy_swapchain();
 
-            // for &pipeline in graphics_pipelines.iter() {
-            //     device.destroy_pipeline(pipeline, None);
-            // }
+            for &pipeline in graphics_pipelines.iter() {
+                device.destroy_pipeline(pipeline, None);
+            }
             device.destroy_pipeline_layout(pipeline_layout, None);
 
             device.destroy_render_pass(renderpass, None);
@@ -291,11 +301,9 @@ impl AAASurface {
             device.destroy_fence(swapchain_resources.draw_commands_reuse_fence, None);
             device.destroy_fence(swapchain_resources.setup_commands_reuse_fence, None);
 
-            device.destroy_command_pool(swapchain_resources.pool, None);
+            device.destroy_command_pool(pool, None);
 
             device.destroy();
-
-            // surface_loader.destroy_surface(self.surface_khr, None);
         }
     }
 }

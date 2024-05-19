@@ -363,6 +363,11 @@ impl ApplicationHandler<UserEvent> for Application {
                 let window_state = self.windows.remove(&window_id).unwrap();
                 window_state.rendering.store(false, Ordering::Relaxed);
                 window_state.render_handle.unwrap().join().unwrap();
+                let surface = window_state.surface.unwrap();
+                unsafe {
+                    self.surface_loader
+                        .destroy_surface(surface.surface_khr, None)
+                };
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 window.modifiers = modifiers.state();
@@ -616,7 +621,7 @@ impl ApplicationHandler<UserEvent> for Application {
 
         // MARK: UNIFORM BUFFER
         let mut uniform = Mat4::IDENTITY;
-        // TEMP: rotate UBO transfrom
+        // TEMP: rotate UBO transfrom by 25% of PI
         uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
 
         let (uniform_color_buffer, uniform_color_buffer_memory) =
@@ -950,7 +955,6 @@ impl ApplicationHandler<UserEvent> for Application {
         registered_meshes.push(registered_square);
 
         let swapchain_resources = AAAResources {
-            pool,
             draw_command_buffer,
             setup_command_buffer,
             depth_image,
@@ -968,6 +972,18 @@ impl ApplicationHandler<UserEvent> for Application {
 
         window_state.render_handle = Some(thread::spawn(move || {
             surface.render(
+                image_buffer_memory,
+                image_buffer,
+                texture_memory,
+                tex_image_view,
+                texture_image,
+                &desc_set_layouts,
+                descriptor_pool,
+                texture_sampler,
+                uniform_color_buffer_memory,
+                uniform_color_buffer,
+                &graphics_pipelines,
+                pool,
                 rendering_clone,
                 &swapchain,
                 &swapchain_resources,

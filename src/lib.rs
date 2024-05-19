@@ -15,14 +15,9 @@ use ash::{
 };
 use glam::Mat4;
 use metrics::Metrics;
-use model::{RegisteredMesh, Vertex};
-use shaders::Shader;
-use std::{
-    default::Default, error::Error, ffi, mem, ops::Drop, os::raw::c_char, sync::mpsc,
-    thread::JoinHandle,
-};
-use vulkan::{record::record_submit_commandbuffer, views::find_memorytype_index};
-use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use model::RegisteredMesh;
+use std::{default::Default, mem, ops::Drop, sync::mpsc, thread::JoinHandle};
+use vulkan::views::find_memorytype_index;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]

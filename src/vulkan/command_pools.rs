@@ -1,8 +1,8 @@
-use ash::{vk, Device};
+use ash::vk;
 use std::error::Error;
 
 pub fn create_command_pools(
-    device: &Device,
+    device: &ash::Device,
     queue_family_index: u32,
 ) -> Result<vk::CommandPool, Box<dyn Error>> {
     let pool_create_info = vk::CommandPoolCreateInfo::default()
