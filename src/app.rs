@@ -1025,9 +1025,6 @@ impl ApplicationHandler<UserEvent> for Application {
 struct WindowState {
     /// IME input.
     ime: bool,
-    /// Render surface.
-    renderer_sender: mpsc::Sender<UserEvent>,
-    renderer_receiver: Option<mpsc::Receiver<UserEvent>>,
     /// The actual winit Window.
     window: Arc<Window>,
     /// The window theme we're drawing with.
@@ -1094,8 +1091,6 @@ impl WindowState {
             custom_idx: app.custom_cursors.len() - 1,
             cursor_grab: CursorGrabMode::None,
             named_idx,
-            renderer_sender,
-            renderer_receiver,
             window,
             theme,
             ime,
@@ -1246,12 +1241,13 @@ impl WindowState {
         // info!("Resized to {size:?}");
         #[cfg(not(any(android_platform, ios_platform)))]
         {
-            self.renderer_sender
-                .send(UserEvent::Resize {
-                    width: size.width,
-                    height: size.height,
-                })
-                .expect("failed to send resize event");
+            // TODO input_manager resize
+            // self.renderer_sender
+            //     .send(UserEvent::Resize {
+            //         width: size.width,
+            //         height: size.height,
+            //     })
+            //     .expect("failed to send resize event");
 
             // input_manager
             // let mut input_manager = self.input_manager_arc_rwlock.write().unwrap();
