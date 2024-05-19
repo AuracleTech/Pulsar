@@ -35,14 +35,6 @@ impl DebugUtils {
             })
         }
     }
-
-    pub fn destroy(&self) {
-        // FIX DUPE DUPE DUPE
-        unsafe {
-            self.debug_utils_loader
-                .destroy_debug_utils_messenger(self.debug_call_back, None);
-        }
-    }
 }
 
 pub extern "system" fn vulkan_debug_callback(

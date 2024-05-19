@@ -15,6 +15,6 @@ pub mod swapchain;
 pub mod uniform;
 pub mod views;
 
-trait Destroy {
+pub trait Destroy {
     fn destroy(&mut self);
 }
