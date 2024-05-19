@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::{fmt, mem, thread};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -363,10 +363,11 @@ impl ApplicationHandler<UserEvent> for Application {
                 let window_state = self.windows.remove(&window_id).unwrap();
                 window_state.rendering.store(false, Ordering::Relaxed);
                 window_state.render_handle.unwrap().join().unwrap();
-                let surface = window_state.surface.unwrap();
+                let surface_arc = window_state.surface;
+                let surface_lock = surface_arc.lock().unwrap();
                 unsafe {
                     self.surface_loader
-                        .destroy_surface(surface.surface_khr, None)
+                        .destroy_surface(surface_lock.surface_khr, None)
                 };
             }
             WindowEvent::ModifiersChanged(modifiers) => {
@@ -496,8 +497,7 @@ impl ApplicationHandler<UserEvent> for Application {
             .expect("failed to create initial window");
         let window_state = self.windows.get_mut(&window_id).unwrap();
 
-        // TEMP
-        let surface = window_state.surface.take().unwrap();
+        let surface = window_state.surface.lock().unwrap();
 
         let mut device = crate::vulkan::device::create_device(
             &self.instance,
@@ -970,7 +970,10 @@ impl ApplicationHandler<UserEvent> for Application {
 
         let rendering_clone = window_state.rendering.clone();
 
+        drop(surface);
+        let surface_clone = window_state.surface.clone();
         window_state.render_handle = Some(thread::spawn(move || {
+            let surface = surface_clone.lock().unwrap();
             surface.render(
                 image_buffer_memory,
                 image_buffer,
@@ -1053,7 +1056,7 @@ struct WindowState {
     cursor_hidden: bool,
 
     // Render
-    surface: Option<AAASurface>, // TODO return to
+    surface: Arc<Mutex<AAASurface>>,
     rendering: Arc<AtomicBool>,
     render_handle: Option<thread::JoinHandle<()>>,
 }
@@ -1105,7 +1108,7 @@ impl WindowState {
             zoom: Default::default(),
             render_handle: Default::default(),
             rendering: Arc::new(AtomicBool::new(true)),
-            surface: Some(surface),
+            surface: Arc::new(Mutex::new(surface)),
         })
     }
 
