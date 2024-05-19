@@ -1,8 +1,7 @@
+use super::Destroy;
 use ash::{ext::debug_utils, vk, Entry};
 use log::debug;
 use std::{borrow::Cow, error::Error, ffi::CStr};
-
-use super::Destroy;
 
 pub struct DebugUtils {
     debug_utils_loader: ash::ext::debug_utils::Instance,
