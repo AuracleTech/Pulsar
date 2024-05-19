@@ -286,7 +286,13 @@ impl AAASurface {
             device.free_memory(uniform_color_buffer_memory, None);
             device.destroy_buffer(uniform_color_buffer, None);
 
-            // self.destroy_swapchain();
+            self.destroy_swapchain(
+                device,
+                swapchain,
+                swapchain_resources,
+                framebuffers,
+                swapchain_loader,
+            );
 
             for &pipeline in graphics_pipelines.iter() {
                 device.destroy_pipeline(pipeline, None);
@@ -304,6 +310,33 @@ impl AAASurface {
             device.destroy_command_pool(pool, None);
 
             device.destroy();
+        }
+    }
+
+    pub fn destroy_swapchain(
+        &self,
+        device: &mut ash::Device,
+        swapchain: &AAASwapchain,
+        swapchain_resources: &AAAResources,
+        framebuffers: &[vk::Framebuffer],
+        swapchain_loader: &swapchain::Device,
+    ) {
+        unsafe {
+            device
+                .device_wait_idle()
+                .expect("Failed to wait for device idle");
+
+            for &framebuffer in framebuffers.iter() {
+                device.destroy_framebuffer(framebuffer, None);
+            }
+            for &image_view in swapchain_resources.present_image_views.iter() {
+                device.destroy_image_view(image_view, None);
+            }
+            swapchain_loader.destroy_swapchain(swapchain.swapchain_khr, None);
+
+            device.free_memory(swapchain_resources.depth_image_memory, None);
+            device.destroy_image_view(swapchain_resources.depth_image_view, None);
+            device.destroy_image(swapchain_resources.depth_image, None);
         }
     }
 }
