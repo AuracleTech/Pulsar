@@ -1,8 +1,6 @@
 use ash::{khr::swapchain, vk, Device};
 use std::error::Error;
 
-use super::Destroy;
-
 // pub struct AAADevice {
 //     pub device: Device,
 // }
