@@ -44,7 +44,7 @@ impl AAASurface {
         entry: &Entry,
         instance: &ash::Instance,
         window: &winit::window::Window,
-        pdevices: &[ash::vk::PhysicalDevice],
+        physical_device_list: &[ash::vk::PhysicalDevice],
         surface_loader: &surface::Instance,
     ) -> Result<Self, Box<dyn Error>> {
         let surface_khr = unsafe {
@@ -58,11 +58,11 @@ impl AAASurface {
             .unwrap()
         };
 
-        let (pdevice, queue_family_index) = pdevices
+        let (physical_device, queue_family_index) = physical_device_list
             .iter()
-            .find_map(|pdevice| unsafe {
+            .find_map(|physical_device| unsafe {
                 instance
-                    .get_physical_device_queue_family_properties(*pdevice)
+                    .get_physical_device_queue_family_properties(*physical_device)
                     .iter()
                     .enumerate()
                     .find_map(|(index, info)| {
@@ -70,13 +70,13 @@ impl AAASurface {
                             info.queue_flags.contains(vk::QueueFlags::GRAPHICS)
                                 && surface_loader
                                     .get_physical_device_surface_support(
-                                        *pdevice,
+                                        *physical_device,
                                         index as u32,
                                         surface_khr,
                                     )
                                     .unwrap();
                         if supports_graphic_and_surface {
-                            Some((*pdevice, index))
+                            Some((*physical_device, index))
                         } else {
                             None
                         }
@@ -87,13 +87,13 @@ impl AAASurface {
 
         let surface_format = unsafe {
             surface_loader
-                .get_physical_device_surface_formats(pdevice, surface_khr)
+                .get_physical_device_surface_formats(physical_device, surface_khr)
                 .unwrap()[0]
         };
 
         let surface_capabilities = unsafe {
             surface_loader
-                .get_physical_device_surface_capabilities(pdevice, surface_khr)
+                .get_physical_device_surface_capabilities(physical_device, surface_khr)
                 .unwrap()
         };
 
@@ -101,7 +101,7 @@ impl AAASurface {
             surface_khr,
             format: surface_format,
             capabilities: surface_capabilities,
-            physical_device: pdevice,
+            physical_device,
             queue_family_index,
         })
     }
