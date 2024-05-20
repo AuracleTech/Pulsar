@@ -76,14 +76,6 @@ pub struct Renderer {
 impl Renderer {
     // #[profiling::function]
     // pub fn render(&mut self) {
-    //     self.process_all_events();
-
-    //     self.metrics.start_frame();
-    //     let delta = self.metrics.delta_start_to_start;
-
-    //     if self.minimized {
-    //         return;
-    //     }
 
     //     self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
 
