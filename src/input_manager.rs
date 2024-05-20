@@ -9,7 +9,6 @@ pub struct EventStates {
     // keyboard_keys: [AtomicBool; 256], // Assuming 256 possible key codes
     pub window_width: AtomicU32,
     pub window_height: AtomicU32,
-    pub minimized: AtomicBool,
     pub exiting: AtomicBool,
 }
 
@@ -21,12 +20,6 @@ impl EventStates {
 
         self.window_width.store(width, Ordering::Relaxed);
         self.window_height.store(height, Ordering::Relaxed);
-
-        if width == 0 || height == 0 {
-            self.minimized.store(true, Ordering::Relaxed);
-        } else {
-            self.minimized.store(false, Ordering::Relaxed);
-        }
     }
 
     #[inline]
@@ -48,7 +41,6 @@ impl Default for EventStates {
             // keyboard_keys: [0; 256].map(|_| AtomicBool::new(false)),
             window_width: AtomicU32::new(WIN_START_INNER_SIZE.width),
             window_height: AtomicU32::new(WIN_START_INNER_SIZE.height),
-            minimized: AtomicBool::new(false),
             exiting: AtomicBool::new(false),
         }
     }

@@ -191,14 +191,16 @@ impl AAASurface {
         let mut outdated_swapchain = false;
 
         while !event_states.exiting.load(Ordering::Relaxed) {
-            if event_states.minimized.load(Ordering::Relaxed) {
+            let width = event_states.window_width.load(Ordering::Relaxed);
+            let height = event_states.window_height.load(Ordering::Relaxed);
+
+            if width == 0 || height == 0 {
                 continue;
             }
 
             if outdated_swapchain {
                 self.recreate_swapchain(
                     instance.clone(),
-                    event_states.clone(),
                     &surface_loader,
                     device,
                     swapchain_loader,
@@ -209,6 +211,8 @@ impl AAASurface {
                     &mut scissors,
                     &mut swapchain,
                     &mut device_memory_properties,
+                    width,
+                    height,
                 );
             }
 
@@ -456,7 +460,6 @@ impl AAASurface {
     fn recreate_swapchain(
         &mut self,
         instance: Arc<ash::Instance>,
-        event_states: Arc<EventStates>,
         surface_loader: &surface::Instance,
         device: &mut ash::Device,
         swapchain_loader: &swapchain::Device,
@@ -467,15 +470,10 @@ impl AAASurface {
         scissors: &mut Vec<vk::Rect2D>,
         swapchain: &mut AAASwapchain,
         device_memory_properties: &mut vk::PhysicalDeviceMemoryProperties,
+        width: u32,
+        height: u32,
     ) {
         println!("Recreating swapchain");
-
-        let width = event_states.window_width.load(Ordering::Relaxed);
-        let height = event_states.window_height.load(Ordering::Relaxed);
-
-        unsafe {
-            device.device_wait_idle().unwrap();
-        }
 
         self.destroy_swapchain(
             device,
@@ -485,7 +483,6 @@ impl AAASurface {
             swapchain_loader,
         );
 
-        // surface
         self.recreate(surface_loader);
 
         // viewports and scissors
