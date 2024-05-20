@@ -6,7 +6,6 @@ use ash::{
     vk, Entry,
 };
 use glam::Mat4;
-use log::debug;
 use rwh_06::{HasDisplayHandle, HasWindowHandle};
 use std::{
     error::Error,
