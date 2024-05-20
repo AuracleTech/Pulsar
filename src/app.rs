@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::{fmt, mem, thread};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalPosition, PhysicalSize};
@@ -165,11 +165,8 @@ impl Application {
             window.recognize_pan_gesture(true, 2, 2);
         }
 
-        let (sender, receiver) = mpsc::channel::<UserEvent>();
-
-        let window_state = WindowState::new(self, window, sender, Some(receiver))?;
+        let window_state = WindowState::new(self, window)?;
         let window_id = window_state.window.id();
-        // info!("Created new window with id={window_id:?}");
         self.windows.insert(window_id, window_state);
         Ok(window_id)
     }
@@ -1059,12 +1056,7 @@ struct WindowState {
 }
 
 impl WindowState {
-    fn new(
-        app: &Application,
-        window: Window,
-        renderer_sender: mpsc::Sender<UserEvent>,
-        renderer_receiver: Option<mpsc::Receiver<UserEvent>>,
-    ) -> Result<Self, Box<dyn Error>> {
+    fn new(app: &Application, window: Window) -> Result<Self, Box<dyn Error>> {
         let window = Arc::new(window);
 
         let theme = window.theme().unwrap_or(Theme::Dark);
