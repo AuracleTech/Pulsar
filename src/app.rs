@@ -973,6 +973,7 @@ impl ApplicationHandler<UserEvent> for Application {
         window_state.render_handle = Some(thread::spawn(move || {
             let surface = surface_clone.lock().unwrap();
             surface.render(
+                minimized,
                 uniform,
                 image_buffer_memory,
                 image_buffer,
@@ -1054,6 +1055,7 @@ struct WindowState {
     // Render
     surface: Arc<Mutex<AAASurface>>,
     stopping: Arc<AtomicBool>,
+    minimized: Arc<AtomicBool>,
     render_handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -1096,6 +1098,7 @@ impl WindowState {
             panned: Default::default(),
             zoom: Default::default(),
             render_handle: Default::default(),
+            minimized: Arc::new(AtomicBool::new(false)),
             stopping: Arc::new(AtomicBool::new(false)),
             surface: Arc::new(Mutex::new(surface)),
         })

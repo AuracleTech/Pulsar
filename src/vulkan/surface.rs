@@ -144,6 +144,7 @@ impl AAASurface {
 
     pub fn render(
         &self,
+        minimized: Arc<AtomicBool>,
         mut uniform: Mat4,
         image_buffer_memory: vk::DeviceMemory,
         image_buffer: vk::Buffer,
@@ -176,6 +177,10 @@ impl AAASurface {
         let mut metrics = Metrics::default();
 
         while !rendering.load(Ordering::Relaxed) {
+            if minimized.load(Ordering::Relaxed) {
+                continue;
+            }
+
             metrics.start_frame();
             let delta = metrics.delta_start_to_start;
 
