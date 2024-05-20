@@ -16,8 +16,8 @@ pub fn create_framebuffers(
             let frame_buffer_create_info = vk::FramebufferCreateInfo::default()
                 .render_pass(renderpass)
                 .attachments(&framebuffer_attachments)
-                .width(surface.resolution.width)
-                .height(surface.resolution.height)
+                .width(surface.capabilities.current_extent.width)
+                .height(surface.capabilities.current_extent.height)
                 .layers(1);
 
             unsafe {

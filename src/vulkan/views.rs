@@ -64,7 +64,7 @@ pub fn create_views_and_depth(
     let depth_image_create_info = vk::ImageCreateInfo::default()
         .image_type(vk::ImageType::TYPE_2D)
         .format(vk::Format::D16_UNORM)
-        .extent(surface.resolution.into())
+        .extent(surface.capabilities.current_extent.into())
         .mip_levels(1)
         .array_layers(1)
         .samples(vk::SampleCountFlags::TYPE_1)

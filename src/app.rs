@@ -4,8 +4,8 @@ use crate::shaders::Shader;
 use crate::vulkan::debug_callback::DebugUtils;
 use crate::vulkan::record::record_submit_commandbuffer;
 use crate::vulkan::surface::{AAAResources, AAASurface};
+use crate::vulkan::views::find_memorytype_index;
 use crate::vulkan::Destroy;
-use crate::{find_memorytype_index, UserEvent};
 use ash::khr::{surface, swapchain};
 use ash::util::Align;
 use ash::vk::{self, PhysicalDevice};
@@ -18,7 +18,6 @@ use rwh_06::HasDisplayHandle;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Debug;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::{fmt, mem, thread};
 use winit::application::ApplicationHandler;
@@ -45,19 +44,24 @@ pub const WIN_START_INNER_SIZE: PhysicalSize<u32> = PhysicalSize::new(1280, 720)
 
 /// Application state and event handling.
 pub struct Application {
-    /// Custom cursors assets.
+    /// Custom cursors assets
     custom_cursors: Vec<CustomCursor>,
-    /// Application icon.
+    /// Application icon
     icon: Icon,
     windows: HashMap<WindowId, WindowState>,
 
     entry: Entry,
-    instance: ash::Instance,
-    surface_loader: surface::Instance,
+    instance: Arc<ash::Instance>,
+    surface_loader: Arc<surface::Instance>,
     #[cfg(debug_assertions)]
     debug_utils: DebugUtils,
 
     physical_device_list: Vec<PhysicalDevice>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum UserEvent {
+    Resize { width: u32, height: u32 },
 }
 
 impl Application {
@@ -116,8 +120,8 @@ impl Application {
             windows: Default::default(),
 
             entry,
-            instance,
-            surface_loader,
+            instance: Arc::new(instance),
+            surface_loader: Arc::new(surface_loader),
             #[cfg(debug_assertions)]
             debug_utils,
             physical_device_list,
@@ -528,7 +532,7 @@ impl ApplicationHandler<UserEvent> for Application {
             depth_image_view,
             depth_image,
             depth_image_memory,
-            device_memory_properties,
+            mut device_memory_properties,
         ) = crate::vulkan::views::create_views_and_depth(
             &device,
             &self.instance,
@@ -966,12 +970,17 @@ impl ApplicationHandler<UserEvent> for Application {
 
         drop(surface);
 
-        let surface_clone = window_state.surface.clone();
-        let event_states_clone = window_state.event_states.clone();
+        let instance_arc = self.instance.clone();
+        let surface_arc = window_state.surface.clone();
+        let surface_loader_arc = self.surface_loader.clone();
+        let event_states_arc = window_state.event_states.clone();
+
         window_state.render_handle = Some(thread::spawn(move || {
-            let surface = surface_clone.lock().unwrap();
-            surface.render(
-                event_states_clone,
+            let mut surface = surface_arc.lock().unwrap();
+            surface.rendering_loop(
+                instance_arc,
+                event_states_arc,
+                surface_loader_arc,
                 uniform,
                 image_buffer_memory,
                 image_buffer,
@@ -985,20 +994,21 @@ impl ApplicationHandler<UserEvent> for Application {
                 uniform_color_buffer,
                 &graphics_pipelines,
                 pool,
-                &swapchain,
-                &swapchain_resources,
+                swapchain,
+                swapchain_resources,
                 &mut device,
                 &swapchain_loader,
                 renderpass,
-                &framebuffers,
-                &viewports,
-                &scissors,
+                &mut framebuffers.to_vec(),
+                &mut viewports.to_vec(),
+                &mut scissors.to_vec(),
                 &descriptor_sets,
                 pipeline_layout,
                 graphic_pipeline,
                 &registered_meshes,
                 vertex_shader_module,
                 fragment_shader_module,
+                &mut device_memory_properties,
             )
         }));
 

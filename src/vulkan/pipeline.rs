@@ -74,12 +74,12 @@ pub fn create_pipeline(
     let viewports = [vk::Viewport {
         x: 0.0,
         y: 0.0,
-        width: surface.resolution.width as f32,
-        height: surface.resolution.height as f32,
+        width: surface.capabilities.current_extent.width as f32,
+        height: surface.capabilities.current_extent.height as f32,
         min_depth: 0.0,
         max_depth: 1.0,
     }];
-    let scissors = [surface.resolution.into()];
+    let scissors = [surface.capabilities.current_extent.into()];
     let viewport_state_info = vk::PipelineViewportStateCreateInfo::default()
         .scissors(&scissors)
         .viewports(&viewports);

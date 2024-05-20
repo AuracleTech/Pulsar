@@ -1,7 +1,6 @@
+use crate::vulkan::views::find_memorytype_index;
 use ash::{util::Align, vk};
 use std::mem;
-
-use crate::find_memorytype_index;
 
 #[derive(Clone, Debug, Copy)]
 pub struct Vertex {
