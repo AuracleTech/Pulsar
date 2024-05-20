@@ -354,10 +354,7 @@ impl ApplicationHandler<UserEvent> for Application {
             WindowEvent::CloseRequested => {
                 info!("Closing Window={window_id:?}");
                 let window_state = self.windows.remove(&window_id).unwrap();
-                window_state
-                    .event_states
-                    .exiting
-                    .store(true, Ordering::Relaxed);
+                window_state.event_states.close_requested();
                 window_state.render_handle.unwrap().join().unwrap();
                 let surface_arc = window_state.surface;
                 let surface_lock = surface_arc.lock().unwrap();
@@ -1243,14 +1240,12 @@ impl WindowState {
         self.theme = theme;
     }
 
-    /// Show window menu.
     fn show_menu(&self) {
         if let Some(position) = self.cursor_position {
             self.window.show_window_menu(position);
         }
     }
 
-    /// Drag the window.
     fn drag_window(&self) {
         if let Err(err) = self.window.drag_window() {
             info!("Error starting window drag: {err}");
@@ -1259,7 +1254,6 @@ impl WindowState {
         }
     }
 
-    /// Drag-resize the window.
     fn drag_resize_window(&self) {
         let position = match self.cursor_position {
             Some(position) => position,

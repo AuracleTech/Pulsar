@@ -1,5 +1,5 @@
 use crate::app::WIN_START_INNER_SIZE;
-use std::sync::atomic::{AtomicBool, AtomicU32};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use winit::dpi::PhysicalSize;
 
 pub struct EventStates {
@@ -14,22 +14,24 @@ pub struct EventStates {
 }
 
 impl EventStates {
+    #[inline]
     pub fn resize(&self, size: PhysicalSize<u32>) {
         let width = size.width;
         let height = size.height;
 
-        self.window_width
-            .store(width, std::sync::atomic::Ordering::Relaxed);
-        self.window_height
-            .store(height, std::sync::atomic::Ordering::Relaxed);
+        self.window_width.store(width, Ordering::Relaxed);
+        self.window_height.store(height, Ordering::Relaxed);
 
         if width == 0 || height == 0 {
-            self.minimized
-                .store(true, std::sync::atomic::Ordering::Relaxed);
+            self.minimized.store(true, Ordering::Relaxed);
         } else {
-            self.minimized
-                .store(false, std::sync::atomic::Ordering::Relaxed);
+            self.minimized.store(false, Ordering::Relaxed);
         }
+    }
+
+    #[inline]
+    pub fn close_requested(&self) {
+        self.exiting.store(true, Ordering::Relaxed);
     }
 }
 
