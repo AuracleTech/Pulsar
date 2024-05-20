@@ -1,4 +1,4 @@
-use crate::input_manager::InputState;
+use crate::input_manager::EventStates;
 use crate::model::{Mesh, Vertex};
 use crate::shaders::Shader;
 use crate::vulkan::debug_callback::DebugUtils;
@@ -58,8 +58,6 @@ pub struct Application {
     debug_utils: DebugUtils,
 
     physical_device_list: Vec<PhysicalDevice>,
-
-    input_state: Arc<InputState>,
 }
 
 impl Application {
@@ -123,8 +121,6 @@ impl Application {
             #[cfg(debug_assertions)]
             debug_utils,
             physical_device_list,
-
-            input_state: Arc::new(Default::default()),
         })
     }
 
@@ -328,14 +324,14 @@ impl ApplicationHandler<UserEvent> for Application {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let window = match self.windows.get_mut(&window_id) {
+        let window_state = match self.windows.get_mut(&window_id) {
             Some(window) => window,
             None => return,
         };
 
         match event {
             WindowEvent::Resized(size) => {
-                window.resize(size);
+                window_state.resize(size);
             }
             WindowEvent::Focused(focused) => {
                 if focused {
@@ -349,16 +345,19 @@ impl ApplicationHandler<UserEvent> for Application {
             }
             WindowEvent::ThemeChanged(theme) => {
                 info!("Theme changed to {theme:?}");
-                window.set_theme(theme);
+                window_state.set_theme(theme);
             }
             WindowEvent::RedrawRequested => {}
             WindowEvent::Occluded(occluded) => {
-                window.set_occluded(occluded);
+                window_state.set_occluded(occluded);
             }
             WindowEvent::CloseRequested => {
                 info!("Closing Window={window_id:?}");
                 let window_state = self.windows.remove(&window_id).unwrap();
-                window_state.stopping.store(true, Ordering::Relaxed);
+                window_state
+                    .event_states
+                    .exiting
+                    .store(true, Ordering::Relaxed);
                 window_state.render_handle.unwrap().join().unwrap();
                 let surface_arc = window_state.surface;
                 let surface_lock = surface_arc.lock().unwrap();
@@ -368,8 +367,8 @@ impl ApplicationHandler<UserEvent> for Application {
                 };
             }
             WindowEvent::ModifiersChanged(modifiers) => {
-                window.modifiers = modifiers.state();
-                info!("Modifiers changed to {:?}", window.modifiers);
+                window_state.modifiers = modifiers.state();
+                info!("Modifiers changed to {:?}", window_state.modifiers);
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::LineDelta(x, y) => {
@@ -384,7 +383,7 @@ impl ApplicationHandler<UserEvent> for Application {
                 is_synthetic: false,
                 ..
             } => {
-                let mods = window.modifiers;
+                let mods = window_state.modifiers;
 
                 // Dispatch actions only on press.
                 if event.state.is_pressed() {
@@ -400,7 +399,7 @@ impl ApplicationHandler<UserEvent> for Application {
                 }
             }
             WindowEvent::MouseInput { button, state, .. } => {
-                let mods = window.modifiers;
+                let mods = window_state.modifiers;
                 if let Some(action) = state
                     .is_pressed()
                     .then(|| Self::process_mouse_binding(button, &mods))
@@ -411,11 +410,11 @@ impl ApplicationHandler<UserEvent> for Application {
             }
             WindowEvent::CursorLeft { .. } => {
                 // info!("Cursor left Window={window_id:?}");
-                window.cursor_left();
+                window_state.cursor_left();
             }
             WindowEvent::CursorMoved { position, .. } => {
                 // info!("Moved cursor to {position:?}");
-                window.cursor_moved(position);
+                window_state.cursor_moved(position);
             }
             WindowEvent::ActivationTokenDone { token: _token, .. } => {
                 #[cfg(any(x11_platform, wayland_platform))]
@@ -437,8 +436,8 @@ impl ApplicationHandler<UserEvent> for Application {
                 Ime::Disabled => info!("IME disabled for Window={window_id:?}"),
             },
             WindowEvent::PinchGesture { delta, .. } => {
-                window.zoom += delta;
-                let zoom = window.zoom;
+                window_state.zoom += delta;
+                let zoom = window_state.zoom;
                 if delta > 0.0 {
                     info!("Zoomed in {delta:.5} (now: {zoom:.5})");
                 } else {
@@ -446,8 +445,8 @@ impl ApplicationHandler<UserEvent> for Application {
                 }
             }
             WindowEvent::RotationGesture { delta, .. } => {
-                window.rotated += delta;
-                let rotated = window.rotated;
+                window_state.rotated += delta;
+                let rotated = window_state.rotated;
                 if delta > 0.0 {
                     info!("Rotated counterclockwise {delta:.5} (now: {rotated:.5})");
                 } else {
@@ -455,9 +454,12 @@ impl ApplicationHandler<UserEvent> for Application {
                 }
             }
             WindowEvent::PanGesture { delta, phase, .. } => {
-                window.panned.x += delta.x;
-                window.panned.y += delta.y;
-                info!("Panned ({delta:?})) (now: {:?}), {phase:?}", window.panned);
+                window_state.panned.x += delta.x;
+                window_state.panned.y += delta.y;
+                info!(
+                    "Panned ({delta:?})) (now: {:?}), {phase:?}",
+                    window_state.panned
+                );
             }
             WindowEvent::DoubleTapGesture { .. } => {
                 info!("Smart zoom");
@@ -965,15 +967,14 @@ impl ApplicationHandler<UserEvent> for Application {
             present_image_views,
         };
 
-        let rendering_clone = window_state.stopping.clone();
-
         drop(surface);
 
         let surface_clone = window_state.surface.clone();
+        let event_states_clone = window_state.event_states.clone();
         window_state.render_handle = Some(thread::spawn(move || {
             let surface = surface_clone.lock().unwrap();
             surface.render(
-                minimized,
+                event_states_clone,
                 uniform,
                 image_buffer_memory,
                 image_buffer,
@@ -987,7 +988,6 @@ impl ApplicationHandler<UserEvent> for Application {
                 uniform_color_buffer,
                 &graphics_pipelines,
                 pool,
-                rendering_clone,
                 &swapchain,
                 &swapchain_resources,
                 &mut device,
@@ -1054,9 +1054,8 @@ struct WindowState {
 
     // Render
     surface: Arc<Mutex<AAASurface>>,
-    stopping: Arc<AtomicBool>,
-    minimized: Arc<AtomicBool>,
     render_handle: Option<thread::JoinHandle<()>>,
+    event_states: Arc<EventStates>,
 }
 
 impl WindowState {
@@ -1098,9 +1097,8 @@ impl WindowState {
             panned: Default::default(),
             zoom: Default::default(),
             render_handle: Default::default(),
-            minimized: Arc::new(AtomicBool::new(false)),
-            stopping: Arc::new(AtomicBool::new(false)),
             surface: Arc::new(Mutex::new(surface)),
+            event_states: Arc::new(Default::default()),
         })
     }
 
@@ -1235,24 +1233,12 @@ impl WindowState {
     }
 
     fn resize(&mut self, size: PhysicalSize<u32>) {
-        // info!("Resized to {size:?}");
         #[cfg(not(any(android_platform, ios_platform)))]
         {
-            // TODO input_manager resize
-            // self.renderer_sender
-            //     .send(UserEvent::Resize {
-            //         width: size.width,
-            //         height: size.height,
-            //     })
-            //     .expect("failed to send resize event");
-
-            // input_manager
-            // let mut input_manager = self.input_manager_arc_rwlock.write().unwrap();
-            // input_manager.window_size = size;
+            self.event_states.resize(size);
         }
     }
 
-    /// Change the theme.
     fn set_theme(&mut self, theme: Theme) {
         self.theme = theme;
     }

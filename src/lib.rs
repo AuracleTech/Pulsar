@@ -1,6 +1,5 @@
 pub mod app;
 mod debugging;
-#[allow(dead_code, unused_variables)] // TEMP
 mod input_manager;
 mod metrics;
 mod model;

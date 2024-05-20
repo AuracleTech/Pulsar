@@ -1,19 +1,17 @@
 use super::{swapchain::AAASwapchain, Destroy};
-use crate::{metrics::Metrics, model::RegisteredMesh};
+use crate::{input_manager::EventStates, metrics::Metrics, model::RegisteredMesh};
 use ash::{
     khr::{surface, swapchain},
     util::Align,
     vk, Entry,
 };
 use glam::Mat4;
+use log::debug;
 use rwh_06::{HasDisplayHandle, HasWindowHandle};
 use std::{
     error::Error,
     mem,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+    sync::{atomic::Ordering, Arc},
 };
 
 pub struct AAASurface {
@@ -144,7 +142,10 @@ impl AAASurface {
 
     pub fn render(
         &self,
-        minimized: Arc<AtomicBool>,
+        event_states: Arc<EventStates>,
+
+        // minimized: Arc<AtomicBool>,
+        // stopping: Arc<AtomicBool>,
         mut uniform: Mat4,
         image_buffer_memory: vk::DeviceMemory,
         image_buffer: vk::Buffer,
@@ -158,7 +159,6 @@ impl AAASurface {
         uniform_color_buffer: vk::Buffer,
         graphics_pipelines: &[vk::Pipeline],
         pool: vk::CommandPool,
-        rendering: Arc<AtomicBool>,
         swapchain: &AAASwapchain,
         swapchain_resources: &AAAResources,
         device: &mut ash::Device,
@@ -176,8 +176,9 @@ impl AAASurface {
     ) {
         let mut metrics = Metrics::default();
 
-        while !rendering.load(Ordering::Relaxed) {
-            if minimized.load(Ordering::Relaxed) {
+        while !event_states.exiting.load(Ordering::Relaxed) {
+            if event_states.minimized.load(Ordering::Relaxed) {
+                debug!("Minimized, skipping frame");
                 continue;
             }
 
