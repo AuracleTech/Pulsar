@@ -178,7 +178,6 @@ impl AAASurface {
 
         while !event_states.exiting.load(Ordering::Relaxed) {
             if event_states.minimized.load(Ordering::Relaxed) {
-                debug!("Minimized, skipping frame");
                 continue;
             }
 
