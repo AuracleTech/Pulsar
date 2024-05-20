@@ -10,53 +10,17 @@ mod vulkan;
 use ash::{
     ext::debug_utils,
     khr::{surface, swapchain},
-    util::Align,
     vk, Device, Entry, Instance,
 };
 use glam::Mat4;
 use metrics::Metrics;
 use model::RegisteredMesh;
-use std::{default::Default, mem, ops::Drop, sync::mpsc, thread::JoinHandle};
 use vulkan::views::find_memorytype_index;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum UserEvent {
     Resize { width: u32, height: u32 },
-}
-
-struct EngineSurface {
-    surface_khr: vk::SurfaceKHR,
-    format: vk::SurfaceFormatKHR,
-    capabilities: vk::SurfaceCapabilitiesKHR,
-    resolution: vk::Extent2D,
-}
-
-struct EngineSwapchain {
-    swapchain_khr: vk::SwapchainKHR,
-    _desired_image_count: u32,
-    _present_mode: vk::PresentModeKHR,
-    present_queue: vk::Queue,
-}
-
-struct SwapchainResources {
-    pool: vk::CommandPool,
-
-    draw_command_buffer: vk::CommandBuffer,
-    setup_command_buffer: vk::CommandBuffer,
-
-    depth_image: vk::Image,
-    depth_image_view: vk::ImageView,
-    depth_image_memory: vk::DeviceMemory,
-
-    present_images: Vec<vk::Image>,
-    present_image_views: Vec<vk::ImageView>,
-
-    draw_commands_reuse_fence: vk::Fence,
-    setup_commands_reuse_fence: vk::Fence,
-
-    present_complete_semaphore: vk::Semaphore,
-    rendering_complete_semaphore: vk::Semaphore,
 }
 
 pub struct Renderer {
@@ -73,11 +37,7 @@ pub struct Renderer {
     device_memory_properties: vk::PhysicalDeviceMemoryProperties,
     queue_family_index: u32,
 
-    surface: EngineSurface,
-
     swapchain_loader: swapchain::Device,
-    swapchain: EngineSwapchain,
-    swapchain_resources: SwapchainResources,
 
     device: Device,
 
@@ -111,85 +71,9 @@ pub struct Renderer {
     metrics: Metrics,
 
     uniform: Mat4,
-
-    receiver: mpsc::Receiver<UserEvent>,
 }
 
 impl Renderer {
-    unsafe fn create_uniform_buffer(
-        device: &Device,
-        device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
-        uniform: Mat4,
-    ) -> (vk::Buffer, vk::DeviceMemory) {
-        let uniform_buffer_info = vk::BufferCreateInfo {
-            size: mem::size_of_val(&uniform) as u64,
-            usage: vk::BufferUsageFlags::UNIFORM_BUFFER,
-            sharing_mode: vk::SharingMode::EXCLUSIVE,
-            ..Default::default()
-        };
-        let uniform_buffer = device.create_buffer(&uniform_buffer_info, None).unwrap();
-        let uniform_buffer_memory_req = device.get_buffer_memory_requirements(uniform_buffer);
-        let uniform_buffer_memory_index = find_memorytype_index(
-            &uniform_buffer_memory_req,
-            device_memory_properties,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        )
-        .expect("Unable to find suitable memorytype for the vertex buffer.");
-
-        let uniform_buffer_allocate_info = vk::MemoryAllocateInfo {
-            allocation_size: uniform_buffer_memory_req.size,
-            memory_type_index: uniform_buffer_memory_index,
-            ..Default::default()
-        };
-        let uniform_buffer_memory = device
-            .allocate_memory(&uniform_buffer_allocate_info, None)
-            .unwrap();
-        let uniform_ptr = device
-            .map_memory(
-                uniform_buffer_memory,
-                0,
-                uniform_buffer_memory_req.size,
-                vk::MemoryMapFlags::empty(),
-            )
-            .unwrap();
-        let mut uniform_aligned_slice = Align::new(
-            uniform_ptr,
-            mem::align_of::<Mat4>() as u64,
-            uniform_buffer_memory_req.size,
-        );
-        uniform_aligned_slice.copy_from_slice(&[uniform]);
-        device.unmap_memory(uniform_buffer_memory);
-        device
-            .bind_buffer_memory(uniform_buffer, uniform_buffer_memory, 0)
-            .unwrap();
-
-        (uniform_buffer, uniform_buffer_memory)
-    }
-
-    unsafe fn update_uniform_buffer(
-        device: &Device,
-        uniform_buffer_memory: vk::DeviceMemory,
-        new_transform: Mat4,
-    ) {
-        let uniform_ptr = device
-            .map_memory(
-                uniform_buffer_memory,
-                0,
-                mem::size_of::<Mat4>() as u64,
-                vk::MemoryMapFlags::empty(),
-            )
-            .unwrap();
-
-        let mut uniform_aligned_slice = Align::new(
-            uniform_ptr,
-            mem::align_of::<Mat4>() as u64,
-            mem::size_of::<Mat4>() as u64,
-        );
-
-        uniform_aligned_slice.copy_from_slice(&[new_transform]);
-        device.unmap_memory(uniform_buffer_memory);
-    }
-
     // #[profiling::function]
     // pub fn render(&mut self) {
     //     self.process_all_events();
@@ -315,12 +199,6 @@ impl Renderer {
 
     //     self.metrics.end_frame();
     // }
-
-    pub fn start_update_thread(&self) -> JoinHandle<()> {
-        std::thread::spawn(move || {
-            // IMPLEMENTATION
-        })
-    }
 
     // fn outdated_swapchain(&mut self) {
     //     self.process_all_events();
@@ -466,22 +344,4 @@ impl Renderer {
     //         self.render();
     //     }
     // }
-
-    unsafe fn destroy_swapchain(&mut self) {
-        for &framebuffer in self.framebuffers.iter() {
-            self.device.destroy_framebuffer(framebuffer, None);
-        }
-        for &image_view in self.swapchain_resources.present_image_views.iter() {
-            self.device.destroy_image_view(image_view, None);
-        }
-        self.swapchain_loader
-            .destroy_swapchain(self.swapchain.swapchain_khr, None);
-
-        self.device
-            .free_memory(self.swapchain_resources.depth_image_memory, None);
-        self.device
-            .destroy_image_view(self.swapchain_resources.depth_image_view, None);
-        self.device
-            .destroy_image(self.swapchain_resources.depth_image, None);
-    }
 }

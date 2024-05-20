@@ -358,7 +358,7 @@ impl ApplicationHandler<UserEvent> for Application {
             WindowEvent::CloseRequested => {
                 info!("Closing Window={window_id:?}");
                 let window_state = self.windows.remove(&window_id).unwrap();
-                window_state.rendering.store(false, Ordering::Relaxed);
+                window_state.stopping.store(true, Ordering::Relaxed);
                 window_state.render_handle.unwrap().join().unwrap();
                 let surface_arc = window_state.surface;
                 let surface_lock = surface_arc.lock().unwrap();
@@ -965,13 +965,15 @@ impl ApplicationHandler<UserEvent> for Application {
             present_image_views,
         };
 
-        let rendering_clone = window_state.rendering.clone();
+        let rendering_clone = window_state.stopping.clone();
 
         drop(surface);
+
         let surface_clone = window_state.surface.clone();
         window_state.render_handle = Some(thread::spawn(move || {
             let surface = surface_clone.lock().unwrap();
             surface.render(
+                uniform,
                 image_buffer_memory,
                 image_buffer,
                 texture_memory,
@@ -1051,7 +1053,7 @@ struct WindowState {
 
     // Render
     surface: Arc<Mutex<AAASurface>>,
-    rendering: Arc<AtomicBool>,
+    stopping: Arc<AtomicBool>,
     render_handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -1094,7 +1096,7 @@ impl WindowState {
             panned: Default::default(),
             zoom: Default::default(),
             render_handle: Default::default(),
-            rendering: Arc::new(AtomicBool::new(true)),
+            stopping: Arc::new(AtomicBool::new(false)),
             surface: Arc::new(Mutex::new(surface)),
         })
     }

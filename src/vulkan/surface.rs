@@ -2,11 +2,14 @@ use super::{swapchain::AAASwapchain, Destroy};
 use crate::{metrics::Metrics, model::RegisteredMesh};
 use ash::{
     khr::{surface, swapchain},
+    util::Align,
     vk, Entry,
 };
+use glam::Mat4;
 use rwh_06::{HasDisplayHandle, HasWindowHandle};
 use std::{
     error::Error,
+    mem,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -108,13 +111,40 @@ impl AAASurface {
         })
     }
 
-    // pub fn update_uniform_buffer(&self, uniform: Mat4) {
+    // pub fn update(&self, uniform: Mat4) {
     //     self.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, 5); // TODO reinplement delta time
     //     self.update_uniform_buffer(&self.device, self.uniform_buffer_memory, self.uniform);
     // }
 
+    fn update_uniform_buffer(
+        device: &ash::Device,
+        uniform_buffer_memory: vk::DeviceMemory,
+        new_transform: Mat4,
+    ) {
+        unsafe {
+            let uniform_ptr = device
+                .map_memory(
+                    uniform_buffer_memory,
+                    0,
+                    mem::size_of::<Mat4>() as u64,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .unwrap();
+
+            let mut uniform_aligned_slice = Align::new(
+                uniform_ptr,
+                mem::align_of::<Mat4>() as u64,
+                mem::size_of::<Mat4>() as u64,
+            );
+
+            uniform_aligned_slice.copy_from_slice(&[new_transform]);
+            device.unmap_memory(uniform_buffer_memory);
+        }
+    }
+
     pub fn render(
         &self,
+        mut uniform: Mat4,
         image_buffer_memory: vk::DeviceMemory,
         image_buffer: vk::Buffer,
         texture_memory: vk::DeviceMemory,
@@ -145,8 +175,12 @@ impl AAASurface {
     ) {
         let mut metrics = Metrics::default();
 
-        while rendering.load(Ordering::Relaxed) {
+        while !rendering.load(Ordering::Relaxed) {
             metrics.start_frame();
+            let delta = metrics.delta_start_to_start;
+
+            uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
+            Self::update_uniform_buffer(device, uniform_color_buffer_memory, uniform);
 
             let result = unsafe {
                 swapchain_loader.acquire_next_image(
@@ -158,7 +192,10 @@ impl AAASurface {
             };
             let (present_index, _) = match result {
                 Ok(result) => result,
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return println!("Outdated swapchain"),
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    println!("Outdated swapchain");
+                    continue;
+                }
                 Err(err) => panic!("Failed to acquire next image: {:?}", err),
             };
             let clear_values = [
@@ -251,7 +288,10 @@ impl AAASurface {
 
             match queue_present_result {
                 Ok(_) => {}
-                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => println!("Outdated swapchain"),
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    println!("Outdated swapchain");
+                    continue;
+                }
                 Err(err) => panic!("Failed to present queue: {:?}", err),
             }
 
