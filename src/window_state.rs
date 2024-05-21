@@ -1,11 +1,10 @@
 use crate::{
     app::Application,
     input_manager::EventStates,
-    model::{Mesh, RegisteredMesh, Vertex},
+    model::{Mesh, Vertex},
     vulkan::{
         record::record_submit_commandbuffer,
         surface::{AAAResources, AAASurface},
-        swapchain::AAASwapchain,
         views::find_memorytype_index,
     },
 };
