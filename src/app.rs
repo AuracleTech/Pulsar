@@ -104,16 +104,6 @@ impl Application {
                 .expect("Physical device error")
         };
 
-        // create artist and send it in a new thread
-        // let artist = Artist::new();
-        // let artist_arc_rwlock = Arc::new(RwLock::new(artist));
-
-        // let artist_arc_rwlock_clone = artist_arc_rwlock.clone();
-        // thread::spawn(move || {
-        //     let artist = artist_arc_rwlock_clone.read().unwrap();
-        //     artist.run();
-        // });
-
         Ok(Self {
             custom_cursors,
             icon,
@@ -1224,7 +1214,6 @@ impl WindowState {
         }
     }
 
-    /// Pick the next cursor.
     fn next_cursor(&mut self) {
         self.named_idx = (self.named_idx + 1) % CURSORS.len();
         // info!("Setting cursor to \"{:?}\"", CURSORS[self.named_idx]);
@@ -1232,7 +1221,6 @@ impl WindowState {
             .set_cursor(Cursor::Icon(CURSORS[self.named_idx]));
     }
 
-    /// Pick the next custom cursor.
     fn next_custom_cursor(&mut self, custom_cursors: &[CustomCursor]) {
         self.custom_idx = (self.custom_idx + 1) % custom_cursors.len();
         let cursor = Cursor::Custom(custom_cursors[self.custom_idx].clone());
