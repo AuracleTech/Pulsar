@@ -1,3 +1,4 @@
+use crate::vulkan::device::AAADevice;
 use ash::{util::*, vk};
 use std::{ffi, io::Cursor, path::Path};
 
@@ -12,7 +13,7 @@ impl<'a> Shader<'a> {
     pub fn from_filename(
         filename: &str,
         stage: vk::ShaderStageFlags,
-        device: &ash::Device,
+        device: &AAADevice,
     ) -> Shader<'a> {
         let path = format!("assets/bin/{}.spv", filename);
         if !Path::new(&path).exists() {
@@ -27,6 +28,7 @@ impl<'a> Shader<'a> {
 
         unsafe {
             let shader_module = device
+                .ash
                 .create_shader_module(&shader_info, None)
                 .expect("Vertex shader module error");
 

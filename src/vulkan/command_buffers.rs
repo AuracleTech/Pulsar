@@ -1,8 +1,9 @@
-use ash::{vk, Device};
+use super::device::AAADevice;
+use ash::vk;
 use std::error::Error;
 
 pub fn create_command_buffers(
-    device: &Device,
+    device: &AAADevice,
     pool: vk::CommandPool,
 ) -> Result<(vk::CommandBuffer, vk::CommandBuffer), Box<dyn Error>> {
     let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
@@ -12,6 +13,7 @@ pub fn create_command_buffers(
 
     let command_buffers = unsafe {
         device
+            .ash
             .allocate_command_buffers(&command_buffer_allocate_info)
             .unwrap()
     };

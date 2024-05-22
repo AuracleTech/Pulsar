@@ -1,4 +1,4 @@
-use crate::vulkan::views::find_memorytype_index;
+use crate::vulkan::{device::AAADevice, views::find_memorytype_index};
 use ash::{util::Align, vk};
 use std::mem;
 
@@ -26,7 +26,7 @@ pub struct RegisteredMesh {
 impl Mesh {
     pub fn register(
         self,
-        device: &ash::Device,
+        device: &AAADevice,
         device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
     ) -> RegisteredMesh {
         unsafe {
@@ -35,8 +35,8 @@ impl Mesh {
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER)
                 .sharing_mode(vk::SharingMode::EXCLUSIVE);
 
-            let index_buffer = device.create_buffer(&index_buffer_info, None).unwrap();
-            let index_buffer_memory_req = device.get_buffer_memory_requirements(index_buffer);
+            let index_buffer = device.ash.create_buffer(&index_buffer_info, None).unwrap();
+            let index_buffer_memory_req = device.ash.get_buffer_memory_requirements(index_buffer);
             let index_buffer_memory_index = find_memorytype_index(
                 &index_buffer_memory_req,
                 device_memory_properties,
@@ -49,8 +49,12 @@ impl Mesh {
                 memory_type_index: index_buffer_memory_index,
                 ..Default::default()
             };
-            let index_buffer_memory = device.allocate_memory(&index_allocate_info, None).unwrap();
+            let index_buffer_memory = device
+                .ash
+                .allocate_memory(&index_allocate_info, None)
+                .unwrap();
             let index_ptr = device
+                .ash
                 .map_memory(
                     index_buffer_memory,
                     0,
@@ -64,8 +68,9 @@ impl Mesh {
                 index_buffer_memory_req.size,
             );
             index_slice.copy_from_slice(&self.indices);
-            device.unmap_memory(index_buffer_memory);
+            device.ash.unmap_memory(index_buffer_memory);
             device
+                .ash
                 .bind_buffer_memory(index_buffer, index_buffer_memory, 0)
                 .unwrap();
 
@@ -77,11 +82,13 @@ impl Mesh {
             };
 
             let vertex_input_buffer = device
+                .ash
                 .create_buffer(&vertex_input_buffer_info, None)
                 .unwrap();
 
-            let vertex_input_buffer_memory_req =
-                device.get_buffer_memory_requirements(vertex_input_buffer);
+            let vertex_input_buffer_memory_req = device
+                .ash
+                .get_buffer_memory_requirements(vertex_input_buffer);
 
             let vertex_input_buffer_memory_index = find_memorytype_index(
                 &vertex_input_buffer_memory_req,
@@ -97,10 +104,12 @@ impl Mesh {
             };
 
             let vertex_input_buffer_memory = device
+                .ash
                 .allocate_memory(&vertex_buffer_allocate_info, None)
                 .unwrap();
 
             let vert_ptr = device
+                .ash
                 .map_memory(
                     vertex_input_buffer_memory,
                     0,
@@ -115,8 +124,9 @@ impl Mesh {
                 vertex_input_buffer_memory_req.size,
             );
             vert_align.copy_from_slice(&self.vertices);
-            device.unmap_memory(vertex_input_buffer_memory);
+            device.ash.unmap_memory(vertex_input_buffer_memory);
             device
+                .ash
                 .bind_buffer_memory(vertex_input_buffer, vertex_input_buffer_memory, 0)
                 .unwrap();
 

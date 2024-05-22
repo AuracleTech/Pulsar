@@ -1,8 +1,7 @@
 use crate::shaders::Shader;
 use crate::vulkan::debug_callback::DebugUtils;
-use crate::vulkan::Destroy;
+use crate::vulkan::AAABase;
 use crate::window_state::WindowState;
-use ash::khr::surface;
 use ash::vk::PhysicalDevice;
 use ash::Entry;
 use log::info;
@@ -34,11 +33,9 @@ pub struct Application {
     icon: Icon,
     windows: HashMap<WindowId, WindowState>,
 
-    pub entry: Entry,
-    pub instance: Arc<ash::Instance>,
-    pub surface_loader: Arc<surface::Instance>,
     #[cfg(debug_assertions)]
     debug_utils: DebugUtils,
+    pub renderer: Arc<AAABase>,
 
     pub physical_device_list: Vec<PhysicalDevice>,
 }
@@ -88,16 +85,21 @@ impl Application {
                 .expect("Physical device error")
         };
 
+        let renderer = AAABase {
+            entry,
+            instance: Arc::new(instance),
+            surface_loader: Arc::new(surface_loader),
+        };
+
         Ok(Self {
             custom_cursors,
             icon,
             windows: Default::default(),
 
-            entry,
-            instance: Arc::new(instance),
-            surface_loader: Arc::new(surface_loader),
             #[cfg(debug_assertions)]
             debug_utils,
+            renderer: Arc::new(renderer),
+
             physical_device_list,
         })
     }
@@ -280,17 +282,6 @@ impl Application {
     }
 }
 
-impl Drop for Application {
-    fn drop(&mut self) {
-        #[cfg(debug_assertions)]
-        self.debug_utils.destroy();
-
-        unsafe {
-            self.instance.destroy_instance(None);
-        }
-    }
-}
-
 impl ApplicationHandler<UserEvent> for Application {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, event: UserEvent) {
         info!("User event: {event:?}");
@@ -332,7 +323,7 @@ impl ApplicationHandler<UserEvent> for Application {
             WindowEvent::CloseRequested => {
                 info!("Closing Window={window_id:?}");
                 let mut window_state = self.windows.remove(&window_id).unwrap();
-                window_state.destroy(self.surface_loader.clone());
+                window_state.destroy();
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 window_state.modifiers = modifiers.state();
@@ -463,7 +454,7 @@ impl ApplicationHandler<UserEvent> for Application {
             .expect("failed to create initial window");
 
         let window_state = self.windows.get_mut(&window_id).unwrap();
-        window_state.init(self.instance.clone(), self.surface_loader.clone());
+        window_state.init();
         self.print_help();
     }
 

@@ -1,9 +1,17 @@
-use super::surface::AAASurface;
-use ash::{
-    khr::{surface, swapchain},
-    vk,
-};
+use super::{device::AAADevice, surface::AAASurface, AAABase};
+use ash::{khr::swapchain, vk};
 use std::error::Error;
+
+pub struct AAASwapchainLoader {
+    pub ash: swapchain::Device,
+}
+
+impl AAASwapchainLoader {
+    pub fn new(renderer: &AAABase, device: &AAADevice) -> Self {
+        let ash = swapchain::Device::new(&renderer.instance, &device.ash);
+        Self { ash }
+    }
+}
 
 pub struct AAASwapchain {
     pub swapchain_khr: vk::SwapchainKHR,
@@ -14,17 +22,18 @@ pub struct AAASwapchain {
 
 impl AAASwapchain {
     pub fn new(
-        device: &ash::Device,
-        surface_loader: &surface::Instance,
+        device: &AAADevice,
+        renderer: &AAABase,
         surface: &AAASurface,
         pdevice: vk::PhysicalDevice,
         queue_family_index: u32,
         width: u32,
         height: u32,
-        swapchain_loader: &swapchain::Device,
+        swapchain_loader: &AAASwapchainLoader,
     ) -> Result<AAASwapchain, Box<dyn Error>> {
         let present_modes = unsafe {
-            surface_loader
+            renderer
+                .surface_loader
                 .get_physical_device_surface_present_modes(pdevice, surface.surface_khr)
                 .unwrap()
         };
@@ -34,7 +43,7 @@ impl AAASwapchain {
             .find(|&mode| mode == vk::PresentModeKHR::MAILBOX)
             .unwrap_or(vk::PresentModeKHR::FIFO);
 
-        let present_queue = unsafe { device.get_device_queue(queue_family_index, 0) };
+        let present_queue = unsafe { device.ash.get_device_queue(queue_family_index, 0) };
 
         let mut desired_image_count = surface.capabilities.min_image_count + 1;
         if surface.capabilities.max_image_count > 0
@@ -72,6 +81,7 @@ impl AAASwapchain {
 
         let swapchain = unsafe {
             swapchain_loader
+                .ash
                 .create_swapchain(&swapchain_create_info, None)
                 .unwrap()
         };

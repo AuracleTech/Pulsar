@@ -1,10 +1,10 @@
-use super::views::find_memorytype_index;
-use ash::{util::Align, vk, Device};
+use super::{device::AAADevice, views::find_memorytype_index};
+use ash::{util::Align, vk};
 use glam::Mat4;
 use std::mem;
 
 pub fn create_uniform_buffer(
-    device: &Device,
+    device: &AAADevice,
     device_memory_properties: &vk::PhysicalDeviceMemoryProperties,
     uniform: Mat4,
 ) -> (vk::Buffer, vk::DeviceMemory) {
@@ -15,8 +15,11 @@ pub fn create_uniform_buffer(
         ..Default::default()
     };
     unsafe {
-        let uniform_buffer = device.create_buffer(&uniform_buffer_info, None).unwrap();
-        let uniform_buffer_memory_req = device.get_buffer_memory_requirements(uniform_buffer);
+        let uniform_buffer = device
+            .ash
+            .create_buffer(&uniform_buffer_info, None)
+            .unwrap();
+        let uniform_buffer_memory_req = device.ash.get_buffer_memory_requirements(uniform_buffer);
         let uniform_buffer_memory_index = find_memorytype_index(
             &uniform_buffer_memory_req,
             device_memory_properties,
@@ -30,9 +33,11 @@ pub fn create_uniform_buffer(
             ..Default::default()
         };
         let uniform_buffer_memory = device
+            .ash
             .allocate_memory(&uniform_buffer_allocate_info, None)
             .unwrap();
         let uniform_ptr = device
+            .ash
             .map_memory(
                 uniform_buffer_memory,
                 0,
@@ -46,8 +51,9 @@ pub fn create_uniform_buffer(
             uniform_buffer_memory_req.size,
         );
         uniform_aligned_slice.copy_from_slice(&[uniform]);
-        device.unmap_memory(uniform_buffer_memory);
+        device.ash.unmap_memory(uniform_buffer_memory);
         device
+            .ash
             .bind_buffer_memory(uniform_buffer, uniform_buffer_memory, 0)
             .unwrap();
 

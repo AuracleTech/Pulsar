@@ -1,6 +1,6 @@
-use super::surface::AAASurface;
+use super::{device::AAADevice, surface::AAASurface};
 use crate::{model::Vertex, shaders::Shader};
-use ash::{vk, Device};
+use ash::vk;
 use std::mem;
 
 #[macro_export]
@@ -15,7 +15,7 @@ macro_rules! offset_of {
 }
 
 pub fn create_pipeline(
-    device: &Device,
+    device: &AAADevice,
     surface: &AAASurface,
     renderpass: vk::RenderPass,
     desc_set_layouts: [vk::DescriptorSetLayout; 1],
@@ -39,6 +39,7 @@ pub fn create_pipeline(
     let layout_create_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
     let pipeline_layout = unsafe {
         device
+            .ash
             .create_pipeline_layout(&layout_create_info, None)
             .unwrap()
     };
@@ -141,6 +142,7 @@ pub fn create_pipeline(
 
     let graphics_pipelines = unsafe {
         device
+            .ash
             .create_graphics_pipelines(vk::PipelineCache::null(), &[graphic_pipeline_info], None)
             .expect("Unable to create graphics pipeline")
     };

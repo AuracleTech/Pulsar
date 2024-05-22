@@ -1,7 +1,9 @@
-use ash::{vk, Device};
+use ash::vk;
+
+use super::device::AAADevice;
 
 pub fn create_descriptor_set(
-    device: &Device,
+    device: &AAADevice,
 ) -> (
     vk::DescriptorPool,
     Vec<vk::DescriptorSet>,
@@ -23,6 +25,7 @@ pub fn create_descriptor_set(
 
     let descriptor_pool = unsafe {
         device
+            .ash
             .create_descriptor_pool(&descriptor_pool_info, None)
             .unwrap()
     };
@@ -46,6 +49,7 @@ pub fn create_descriptor_set(
 
     let desc_set_layouts = [unsafe {
         device
+            .ash
             .create_descriptor_set_layout(&descriptor_info, None)
             .unwrap()
     }];
@@ -53,7 +57,12 @@ pub fn create_descriptor_set(
     let desc_alloc_info = vk::DescriptorSetAllocateInfo::default()
         .descriptor_pool(descriptor_pool)
         .set_layouts(&desc_set_layouts);
-    let descriptor_sets = unsafe { device.allocate_descriptor_sets(&desc_alloc_info).unwrap() };
+    let descriptor_sets = unsafe {
+        device
+            .ash
+            .allocate_descriptor_sets(&desc_alloc_info)
+            .unwrap()
+    };
 
     (descriptor_pool, descriptor_sets, desc_set_layouts)
 }

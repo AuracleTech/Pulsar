@@ -1,9 +1,9 @@
-use super::surface::AAASurface;
-use ash::{vk, Device};
+use super::{device::AAADevice, surface::AAASurface};
+use ash::vk;
 use std::error::Error;
 
 pub fn create_framebuffers(
-    device: &Device,
+    device: &AAADevice,
     surface: &AAASurface,
     present_image_views: &[vk::ImageView],
     depth_image_view: vk::ImageView,
@@ -22,6 +22,7 @@ pub fn create_framebuffers(
 
             unsafe {
                 device
+                    .ash
                     .create_framebuffer(&frame_buffer_create_info, None)
                     .unwrap()
             }

@@ -1,10 +1,11 @@
-use ash::{vk, Device};
+use super::device::AAADevice;
+use ash::vk;
 
 /// Helper function for submitting command buffers. Immediately waits for the fence before the command buffer
 /// is executed. That way we can delay the waiting for the fences by 1 frame which is good for performance.
 /// Make sure to create the fence in a signaled state on the first use.
-pub fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
-    device: &Device,
+pub fn record_submit_commandbuffer<F: FnOnce(&AAADevice, vk::CommandBuffer)>(
+    device: &AAADevice,
     command_buffer: vk::CommandBuffer,
     command_buffer_reuse_fence: vk::Fence,
     submit_queue: vk::Queue,
@@ -15,14 +16,17 @@ pub fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
 ) {
     unsafe {
         device
+            .ash
             .wait_for_fences(&[command_buffer_reuse_fence], true, u64::MAX)
             .expect("Wait for fence failed.");
 
         device
+            .ash
             .reset_fences(&[command_buffer_reuse_fence])
             .expect("Reset fences failed.");
 
         device
+            .ash
             .reset_command_buffer(
                 command_buffer,
                 vk::CommandBufferResetFlags::RELEASE_RESOURCES,
@@ -35,10 +39,14 @@ pub fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
 
     unsafe {
         device
+            .ash
             .begin_command_buffer(command_buffer, &command_buffer_begin_info)
             .expect("Begin commandbuffer");
-        f(device, command_buffer);
+    }
+    f(device, command_buffer);
+    unsafe {
         device
+            .ash
             .end_command_buffer(command_buffer)
             .expect("End commandbuffer");
     }
@@ -53,6 +61,7 @@ pub fn record_submit_commandbuffer<F: FnOnce(&Device, vk::CommandBuffer)>(
 
     unsafe {
         device
+            .ash
             .queue_submit(submit_queue, &[submit_info], command_buffer_reuse_fence)
             .expect("queue submit failed.")
     };

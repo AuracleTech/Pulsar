@@ -1,10 +1,10 @@
-use super::surface::AAASurface;
-use ash::{vk, Device};
+use super::{device::AAADevice, surface::AAASurface};
+use ash::vk;
 use std::error::Error;
 
 pub fn create_renderpass(
     surface: &AAASurface,
-    device: &Device,
+    device: &AAADevice,
 ) -> Result<vk::RenderPass, Box<dyn Error>> {
     let renderpass_attachments = [
         vk::AttachmentDescription {
@@ -53,6 +53,7 @@ pub fn create_renderpass(
 
     let renderpass = unsafe {
         device
+            .ash
             .create_render_pass(&renderpass_create_info, None)
             .unwrap()
     };

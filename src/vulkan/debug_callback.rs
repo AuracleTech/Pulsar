@@ -1,4 +1,3 @@
-use super::Destroy;
 use ash::{ext::debug_utils, vk, Entry};
 use log::debug;
 use std::{borrow::Cow, error::Error, ffi::CStr};
@@ -66,8 +65,8 @@ pub extern "system" fn vulkan_debug_callback(
     }
 }
 
-impl Destroy for DebugUtils {
-    fn destroy(&mut self) {
+impl Drop for DebugUtils {
+    fn drop(&mut self) {
         unsafe {
             self.debug_utils_loader
                 .destroy_debug_utils_messenger(self.debug_call_back, None);
