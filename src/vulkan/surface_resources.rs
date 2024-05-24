@@ -19,7 +19,7 @@ use std::{
 };
 
 pub struct AAAResources {
-    pub device: AAADevice,
+    pub device: Arc<AAADevice>, // TEMP Remve from there should be in super
 
     pub draw_command_buffer: vk::CommandBuffer,
     pub setup_command_buffer: vk::CommandBuffer,
@@ -70,13 +70,19 @@ pub struct AAAResources {
     pub graphic_pipeline: vk::Pipeline,
 
     pub registered_meshes: Vec<RegisteredMesh>,
+    pub device_memory_properties: vk::PhysicalDeviceMemoryProperties,
 }
 
 impl AAAResources {
-    pub fn new(base: Arc<AAABase>, surface: Arc<Mutex<AAASurface>>) -> Self {
+    pub fn new(
+        base: Arc<AAABase>,
+        surface: Arc<Mutex<AAASurface>>,
+        width: u32,
+        height: u32,
+    ) -> Self {
         let surface = surface.lock().unwrap();
 
-        let mut device = AAADevice::new(
+        let device = AAADevice::new(
             &base.instance,
             surface.physical_device,
             surface.queue_family_index,
@@ -85,7 +91,7 @@ impl AAAResources {
         let swapchain_loader = AAASwapchainLoader::new(&base, &device);
 
         // TODO get from os window api for linux and possibly more
-        let size = surface.capabilities.current_extent;
+        // let size = surface.capabilities.current_extent; // TODO VERIFY THERE S NOT MORE ELSEWHERE
 
         let swapchain = AAASwapchain::new(
             &device,
@@ -93,11 +99,10 @@ impl AAAResources {
             &surface,
             surface.physical_device,
             surface.queue_family_index,
-            size.width,
-            size.height,
+            width,
+            height,
             &swapchain_loader,
-        )
-        .unwrap();
+        );
 
         let (draw_commands_reuse_fence, setup_commands_reuse_fence) =
             crate::vulkan::fence_semaphores::create_fences(&device).unwrap();
@@ -537,7 +542,7 @@ impl AAAResources {
         registered_meshes.push(registered_square);
 
         Self {
-            device,
+            device: Arc::new(device),
 
             draw_command_buffer,
             setup_command_buffer,
@@ -588,124 +593,71 @@ impl AAAResources {
             graphic_pipeline,
 
             registered_meshes,
+
+            device_memory_properties,
         }
     }
 
-    // fn recreate() {
-    //     let mut surface = self.surface.lock().unwrap();
+    // TODO reuse at creation and recreation
+    pub fn recreate_viewports(&mut self, width: u32, height: u32) {
+        self.viewports = [vk::Viewport {
+            x: 0.0,
+            y: 0.0,
+            width: width as f32,
+            height: height as f32,
+            min_depth: 0.0,
+            max_depth: 1.0,
+        }];
+    }
 
-    //     surface.destroy_swapchain(
-    //         device,
-    //         &swapchain,
-    //         &swapchain_resources,
-    //         framebuffers,
-    //         swapchain_loader,
-    //     );
+    // TODO reuse at creation and recreation
+    pub fn recreate_scissors(&mut self, width: u32, height: u32) {
+        self.scissors = [vk::Rect2D {
+            offset: vk::Offset2D { x: 0, y: 0 },
+            extent: vk::Extent2D { width, height },
+        }];
+    }
 
-    //     surface.recreate(surface_loader);
+    // TODO on creation also register the depth image memory instead of code dupe
+    pub fn register_depth_image_memory(&mut self) {
+        record_submit_commandbuffer(
+            &self.device,
+            self.setup_command_buffer,
+            self.setup_commands_reuse_fence,
+            self.swapchain.present_queue,
+            &[],
+            &[],
+            &[],
+            |_device, setup_command_buffer| {
+                let layout_transition_barriers = vk::ImageMemoryBarrier::default()
+                    .image(self.depth_image)
+                    .dst_access_mask(
+                        vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                            | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+                    )
+                    .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+                    .old_layout(vk::ImageLayout::UNDEFINED)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                            .layer_count(1)
+                            .level_count(1),
+                    );
 
-    //     // viewports and scissors
-    //     *viewports = [vk::Viewport {
-    //         x: 0.0,
-    //         y: 0.0,
-    //         width: width as f32,
-    //         height: height as f32,
-    //         min_depth: 0.0,
-    //         max_depth: 1.0,
-    //     }]
-    //     .to_vec();
-    //     *scissors = [vk::Rect2D {
-    //         offset: vk::Offset2D { x: 0, y: 0 },
-    //         extent: vk::Extent2D { width, height },
-    //     }]
-    //     .to_vec();
-
-    //     // swapchain
-    //     *swapchain = crate::vulkan::swapchain::AAASwapchain::new(
-    //         &device,
-    //         &surface_loader,
-    //         &surface,
-    //         surface.physical_device,
-    //         surface.queue_family_index,
-    //         width,
-    //         height,
-    //         &swapchain_loader,
-    //     )
-    //     .unwrap();
-
-    //     // image_views
-    //     let (
-    //         present_images,
-    //         present_image_views,
-    //         depth_image_view,
-    //         depth_image,
-    //         depth_image_memory,
-    //         device_memory_properties_new,
-    //     ) = crate::vulkan::views::create_views_and_depth(
-    //         &device,
-    //         &self.instance,
-    //         &swapchain,
-    //         &surface,
-    //         &surface.physical_device,
-    //         &swapchain_loader,
-    //     );
-
-    //     swapchain_resources.present_images = present_images;
-    //     swapchain_resources.present_image_views = present_image_views;
-    //     swapchain_resources.depth_image_view = depth_image_view;
-    //     swapchain_resources.depth_image = depth_image;
-    //     swapchain_resources.depth_image_memory = depth_image_memory;
-    //     *device_memory_properties = device_memory_properties_new;
-
-    //     // framebuffers
-    //     *framebuffers = crate::vulkan::framebuffer::create_framebuffers(
-    //         &device,
-    //         &surface,
-    //         &swapchain_resources.present_image_views,
-    //         depth_image_view,
-    //         renderpass,
-    //     )
-    //     .unwrap();
-
-    //     // register depth image memory
-    //     record_submit_commandbuffer(
-    //         &device,
-    //         swapchain_resources.setup_command_buffer,
-    //         swapchain_resources.setup_commands_reuse_fence,
-    //         swapchain.present_queue,
-    //         &[],
-    //         &[],
-    //         &[],
-    //         |device, setup_command_buffer| {
-    //             let layout_transition_barriers = vk::ImageMemoryBarrier::default()
-    //                 .image(depth_image)
-    //                 .dst_access_mask(
-    //                     vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
-    //                         | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
-    //                 )
-    //                 .new_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-    //                 .old_layout(vk::ImageLayout::UNDEFINED)
-    //                 .subresource_range(
-    //                     vk::ImageSubresourceRange::default()
-    //                         .aspect_mask(vk::ImageAspectFlags::DEPTH)
-    //                         .layer_count(1)
-    //                         .level_count(1),
-    //                 );
-
-    //             unsafe {
-    //                 device.cmd_pipeline_barrier(
-    //                     setup_command_buffer,
-    //                     vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-    //                     vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
-    //                     vk::DependencyFlags::empty(),
-    //                     &[],
-    //                     &[],
-    //                     &[layout_transition_barriers],
-    //                 );
-    //             }
-    //         },
-    //     );
-    // }
+                unsafe {
+                    self.device.ash.cmd_pipeline_barrier(
+                        setup_command_buffer,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+                        vk::DependencyFlags::empty(),
+                        &[],
+                        &[],
+                        &[layout_transition_barriers],
+                    );
+                }
+            },
+        );
+    }
 }
 
 impl Drop for AAAResources {

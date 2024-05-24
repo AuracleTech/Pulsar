@@ -10,8 +10,13 @@ pub struct EventStates {
 
 impl EventStates {
     #[inline]
-    pub fn close_requested(&self) {
+    pub fn exiting(&self) {
         self.exiting.store(true, Ordering::Relaxed);
+    }
+
+    #[inline]
+    pub fn opening(&self) {
+        self.exiting.store(false, Ordering::Relaxed);
     }
 }
 

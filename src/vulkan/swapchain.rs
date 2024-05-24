@@ -1,6 +1,5 @@
 use super::{device::AAADevice, surface::AAASurface, AAABase};
 use ash::{khr::swapchain, vk};
-use std::error::Error;
 
 pub struct AAASwapchainLoader {
     pub ash: swapchain::Device,
@@ -23,17 +22,16 @@ pub struct AAASwapchain {
 impl AAASwapchain {
     pub fn new(
         device: &AAADevice,
-        renderer: &AAABase,
+        base: &AAABase,
         surface: &AAASurface,
         pdevice: vk::PhysicalDevice,
         queue_family_index: u32,
         width: u32,
         height: u32,
         swapchain_loader: &AAASwapchainLoader,
-    ) -> Result<AAASwapchain, Box<dyn Error>> {
+    ) -> Self {
         let present_modes = unsafe {
-            renderer
-                .surface_loader
+            base.surface_loader
                 .get_physical_device_surface_present_modes(pdevice, surface.surface_khr)
                 .unwrap()
         };
@@ -86,11 +84,11 @@ impl AAASwapchain {
                 .unwrap()
         };
 
-        Ok(AAASwapchain {
+        AAASwapchain {
             swapchain_khr: swapchain,
             _desired_image_count: desired_image_count,
             _present_mode: present_mode,
             present_queue,
-        })
+        }
     }
 }

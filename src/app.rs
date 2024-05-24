@@ -34,7 +34,7 @@ pub struct Application {
     windows: HashMap<WindowId, WindowState>,
 
     #[cfg(debug_assertions)]
-    debug_utils: DebugUtils,
+    _debug_utils: DebugUtils,
     pub renderer: Arc<AAABase>,
 
     pub physical_device_list: Vec<PhysicalDevice>,
@@ -77,7 +77,7 @@ impl Application {
         let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
 
         #[cfg(debug_assertions)]
-        let debug_utils = DebugUtils::new(&entry, &instance)?;
+        let _debug_utils = DebugUtils::new(&entry, &instance)?;
 
         let physical_device_list = unsafe {
             instance
@@ -97,7 +97,7 @@ impl Application {
             windows: Default::default(),
 
             #[cfg(debug_assertions)]
-            debug_utils,
+            _debug_utils,
             renderer: Arc::new(renderer),
 
             physical_device_list,
@@ -323,7 +323,7 @@ impl ApplicationHandler<UserEvent> for Application {
             WindowEvent::CloseRequested => {
                 info!("Closing Window={window_id:?}");
                 let mut window_state = self.windows.remove(&window_id).unwrap();
-                window_state.destroy();
+                window_state.render_thread_close_join();
             }
             WindowEvent::ModifiersChanged(modifiers) => {
                 window_state.modifiers = modifiers.state();
@@ -454,7 +454,7 @@ impl ApplicationHandler<UserEvent> for Application {
             .expect("failed to create initial window");
 
         let window_state = self.windows.get_mut(&window_id).unwrap();
-        window_state.init();
+        window_state.create_renderer();
         self.print_help();
     }
 

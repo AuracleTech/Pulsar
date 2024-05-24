@@ -1,13 +1,9 @@
 use super::{device::AAADevice, surface_resources::AAAResources, AAABase};
-use crate::{input_manager::EventStates, metrics::Metrics};
+use crate::metrics::Metrics;
 use ash::{khr::surface, util::Align, vk};
 use glam::Mat4;
 use rwh_06::{HasDisplayHandle, HasWindowHandle};
-use std::{
-    error::Error,
-    mem,
-    sync::{atomic::Ordering, Arc},
-};
+use std::{error::Error, mem, sync::Arc};
 
 pub struct AAASurface {
     pub surface_khr: vk::SurfaceKHR,
@@ -134,12 +130,11 @@ impl AAASurface {
         }
     }
 
-    pub fn render(&self, resources: &AAAResources, metrics: &mut Metrics) -> bool {
+    pub fn render(&self, resources: &mut AAAResources, metrics: &mut Metrics) -> bool {
         metrics.start_frame();
 
-        // FIX TEMP
-        // let delta = metrics.delta_start_to_start;
-        // resources.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
+        let delta = metrics.delta_start_to_start;
+        resources.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
         Self::update_uniform_buffer(
             &resources.device,
             resources.uniform_color_buffer_memory,
@@ -156,10 +151,7 @@ impl AAASurface {
         };
         let (present_index, _) = match result {
             Ok(result) => result,
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                println!("Outdated swapchain");
-                return true;
-            }
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return true,
             Err(err) => panic!("Failed to acquire next image: {:?}", err),
         };
         let clear_values = [
@@ -260,10 +252,7 @@ impl AAASurface {
 
         match queue_present_result {
             Ok(_) => {}
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                println!("Outdated swapchain");
-                return true;
-            }
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => return true,
             Err(err) => panic!("Failed to present queue: {:?}", err),
         }
 

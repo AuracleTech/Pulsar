@@ -91,6 +91,9 @@ pub struct WindowState {
     // // TODO Remove pub
     pub renderer: Arc<AAABase>,
     pub surface: Arc<Mutex<AAASurface>>,
+
+    pub graphics: Option<Arc<Mutex<AAAGraphics>>>,
+
     pub render_handle: Option<thread::JoinHandle<()>>,
 
     pub event_states: Arc<EventStates>,
@@ -135,6 +138,7 @@ impl WindowState {
             surface: Arc::new(Mutex::new(surface)),
             render_handle: Default::default(),
             event_states: Default::default(),
+            graphics: Default::default(),
         })
     }
 
@@ -267,10 +271,17 @@ impl WindowState {
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
         #[cfg(not(any(android_platform, ios_platform)))]
         {
+            self.render_thread_close_join();
+
             let width = size.width;
             let height = size.height;
 
-            // self.recreate_swapchain(width, height); // FIX
+            let graphics_locked = self.graphics.clone().unwrap();
+            let mut graphics = graphics_locked.lock().unwrap();
+            graphics.recreate_swapchain(width, height);
+            drop(graphics);
+
+            self.spawn_render_thread_and_render();
         }
     }
 
@@ -349,31 +360,44 @@ impl WindowState {
         }
     }
 
-    pub fn init(&mut self) {
+    pub fn create_renderer(&mut self) {
         let renderer = self.renderer.clone();
-        let surface_locked = self.surface.clone();
         let event_states = self.event_states.clone();
-        let graphics = { AAAGraphics::new(renderer, surface_locked, event_states) };
+        let width = self.window.inner_size().width;
+        let height = self.window.inner_size().height;
+        let graphics = {
+            let surface_locked = self.surface.clone();
+            AAAGraphics::new(renderer, surface_locked, event_states, width, height)
+        };
+        self.graphics = Some(Arc::new(Mutex::new(graphics)));
 
-        self.render_handle = Some(thread::spawn(move || {
-            graphics.cycle();
-        }));
+        self.spawn_render_thread_and_render();
     }
 
-    pub fn destroy(&mut self) {
-        self.event_states.close_requested();
+    pub fn render_thread_close_join(&mut self) {
+        self.event_states.exiting();
         if let Some(handle) = self.render_handle.take() {
             handle.join().unwrap();
         }
+    }
+
+    pub fn spawn_render_thread_and_render(&mut self) {
+        self.event_states.opening();
+        let graphics_locked = self.graphics.clone().unwrap();
+        self.render_handle = Some(thread::spawn(move || {
+            let mut graphics = graphics_locked.lock().unwrap();
+            graphics.cycle();
+        }));
     }
 }
 
 impl Drop for WindowState {
     fn drop(&mut self) {
-        let renderer = self.renderer.clone();
+        self.graphics = None;
         let surface_guard = self.surface.lock().unwrap();
         unsafe {
-            renderer
+            // TODO move on its own struct
+            self.renderer
                 .surface_loader
                 .destroy_surface(surface_guard.surface_khr, None)
         };
