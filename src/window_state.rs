@@ -276,6 +276,10 @@ impl WindowState {
             let width = size.width;
             let height = size.height;
 
+            if width == 0 || height == 0 {
+                return;
+            }
+
             let graphics_locked = self.graphics.clone().unwrap();
             let mut graphics = graphics_locked.lock().unwrap();
             graphics.recreate_swapchain(width, height);
