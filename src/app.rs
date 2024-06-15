@@ -1,4 +1,5 @@
 use crate::shaders::Shader;
+#[cfg(debug_assertions)]
 use crate::vulkan::debug_callback::DebugUtils;
 use crate::vulkan::AAABase;
 use crate::window_state::WindowState;
