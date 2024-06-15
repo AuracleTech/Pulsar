@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use pulsar::app::{Application, UserEvent};
 use std::error::Error;
 use winit::event_loop::EventLoop;
