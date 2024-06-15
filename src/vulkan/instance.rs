@@ -25,9 +25,12 @@ pub fn create_instance(
             // Enabling this extension is a requirement when using `VK_KHR_portability_subset`
             extension_names.push(ash::khr::get_physical_device_properties2::NAME.as_ptr());
         }
+        #[cfg(debug_assertions)]
         let layer_names = [ffi::CStr::from_bytes_with_nul_unchecked(
             b"VK_LAYER_KHRONOS_validation\0",
         )];
+        #[cfg(not(debug_assertions))]
+        let layer_names: Vec<ffi::CString> = Vec::new();
         let layers_names_raw: Vec<*const c_char> = layer_names
             .iter()
             .map(|raw_name| raw_name.as_ptr())
