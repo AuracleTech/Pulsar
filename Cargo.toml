@@ -20,13 +20,15 @@ cursor-icon = "1.1.0"
 rwh_06 = { package = "raw-window-handle", version = "0.6", features = ["std"] }
 # math
 glam = "0.27.0"
-# profiling
-profiling = "1.0.15"
 # engine
 image = "0.25"
 env_logger = "0.11.3"
 log = "0.4.21"
 rand = "0.8.5"
+
+[dev-dependencies]
+# profiling
+profiling = "1.0.15"
 
 [features]
 # profiling
