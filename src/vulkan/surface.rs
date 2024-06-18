@@ -133,13 +133,19 @@ impl AAASurface {
     pub fn render(&self, resources: &mut AAAResources, metrics: &mut Metrics) -> bool {
         metrics.start_frame();
 
-        let delta = metrics.delta_start_to_start;
-        resources.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
-        Self::update_uniform_buffer(
-            &resources.device,
-            resources.uniform_color_buffer_memory,
-            resources.uniform,
-        );
+        let force_throttle = true;  // TEMP
+        if force_throttle {
+            std::thread::sleep(std::time::Duration::from_millis(32));
+        }
+
+        // MARK: rotate in real time
+        // let delta = metrics.delta_start_to_start;
+        // resources.uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, delta.as_secs_f32());
+        // Self::update_uniform_buffer(
+        //     &resources.device,
+        //     resources.uniform_color_buffer_memory,
+        //     resources.uniform,
+        // );
 
         let result = unsafe {
             resources.swapchain_loader.ash.acquire_next_image(
