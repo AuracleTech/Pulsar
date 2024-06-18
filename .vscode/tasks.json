@@ -2,9 +2,9 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"type": "cargo",
-			"command": "run",
-			"args": ["--example", "example"],
+			"type": "shell",
+			"command": "cargo",
+			"args": ["run", "--example", "example"],
 			"problemMatcher": ["$rustc"],
 			"label": "rust: cargo run",
 			"group": {
