@@ -19,13 +19,6 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::keyboard::{Key, ModifiersState};
 use winit::window::{CustomCursor, CustomCursorSource, Icon, Window, WindowId};
 
-#[cfg(macos_platform)]
-use winit::platform::macos::{OptionAsAlt, WindowAttributesExtMacOS, WindowExtMacOS};
-#[cfg(any(x11_platform, wayland_platform))]
-use winit::platform::startup_notify::{
-    self, EventLoopExtStartupNotify, WindowAttributesExtStartupNotify, WindowExtStartupNotify,
-};
-
 const WIN_TITLE: &str = "Pulsar";
 pub const WIN_START_INNER_SIZE: PhysicalSize<u32> = PhysicalSize::new(1280, 720);
 
@@ -53,10 +46,9 @@ impl Application {
         #[cfg(debug_assertions)]
         Shader::compile_shaders();
 
-        // You'll have to choose an icon size at your own discretion. On X11, the desired size
-        // varies by WM, and on Windows, you still have to account for screen scaling. Here
-        // we use 32px, since it seems to work well enough in most cases. Be careful about
-        // going too high, or you'll be bitten by the low-quality downscaling built into the
+        // You'll have to choose an icon size at your own discretion. On Windows, you still have to account
+        //  for screen scaling. Here we use 32px, since it seems to work well enough in most cases.
+        // Be careful about going too high, or you'll be bitten by the low-quality downscaling built into the
         // WM.
         let icon = load_icon(include_bytes!("../assets/img/icon.png"));
 
@@ -119,28 +111,7 @@ impl Application {
             .with_window_icon(Some(self.icon.clone()))
             .with_inner_size(WIN_START_INNER_SIZE);
 
-        #[cfg(any(x11_platform, wayland_platform))]
-        if let Some(token) = event_loop.read_token_from_env() {
-            startup_notify::reset_activation_token_env();
-            // info!("Using token {:?} to activate a window", token);
-            window_attributes = window_attributes.with_activation_token(token);
-        }
-
-        #[cfg(macos_platform)]
-        if let Some(tab_id) = _tab_id {
-            window_attributes = window_attributes.with_tabbing_identifier(&tab_id);
-        }
-
         let window = event_loop.create_window(window_attributes)?;
-
-        #[cfg(ios_platform)]
-        {
-            use winit::platform::ios::WindowExtIOS;
-            window.recognize_doubletap_gesture(true);
-            window.recognize_pinch_gesture(true);
-            window.recognize_rotation_gesture(true);
-            window.recognize_pan_gesture(true, 2, 2);
-        }
 
         let window_state = WindowState::new(self, window)?;
         let window_id = window_state.window.id();
@@ -157,16 +128,8 @@ impl Application {
                 self.windows.remove(&window_id).unwrap();
             }
             Action::CreateNewWindow => {
-                #[cfg(any(x11_platform, wayland_platform))]
-                if let Err(err) = window.window.request_activation_token() {
-                    info!("Failed to get activation token: {err}");
-                } else {
-                    return;
-                }
-
-                if let Err(err) = self.create_window(event_loop, None) {
-                    panic!("Error creating new window: {err}");
-                }
+                self.create_window(event_loop, None)
+                    .expect("failed to create new window");
             }
             Action::ToggleResizeIncrements => window.toggle_resize_increments(),
             Action::ToggleCursorVisibility => window.toggle_cursor_visibility(),
@@ -183,15 +146,6 @@ impl Application {
             Action::DragResizeWindow => window.drag_resize_window(),
             Action::ShowWindowMenu => window.show_menu(),
             Action::PrintHelp => self.print_help(),
-            #[cfg(macos_platform)]
-            Action::CycleOptionAsAlt => window.cycle_option_as_alt(),
-            #[cfg(macos_platform)]
-            Action::CreateNewTab => {
-                let tab_id = window.window.tabbing_identifier();
-                if let Err(err) = self.create_window(event_loop, Some(tab_id)) {
-                    error!("Error creating new window: {err}");
-                }
-            }
             Action::RequestResize => window.swap_dimensions(),
         }
     }
@@ -376,15 +330,7 @@ impl ApplicationHandler<UserEvent> for Application {
                 // info!("Moved cursor to {position:?}");
                 window_state.cursor_moved(position);
             }
-            WindowEvent::ActivationTokenDone { token: _token, .. } => {
-                #[cfg(any(x11_platform, wayland_platform))]
-                {
-                    startup_notify::set_activation_token_env(_token);
-                    if let Err(err) = self.create_window(event_loop, None) {
-                        error!("Error creating new window: {err}");
-                    }
-                }
-            }
+            WindowEvent::ActivationTokenDone { token: _token, .. } => {}
             WindowEvent::Ime(event) => match event {
                 Ime::Enabled => {} // info!("IME enabled for Window={window_id:?}"),
                 Ime::Preedit(text, caret_pos) => {
@@ -511,10 +457,6 @@ enum Action {
     DragWindow,
     DragResizeWindow,
     ShowWindowMenu,
-    #[cfg(macos_platform)]
-    CycleOptionAsAlt,
-    #[cfg(macos_platform)]
-    CreateNewTab,
     RequestResize,
 }
 
@@ -538,10 +480,6 @@ impl Action {
             Action::DragWindow => "Start window drag",
             Action::DragResizeWindow => "Start window drag-resize",
             Action::ShowWindowMenu => "Show window menu",
-            #[cfg(macos_platform)]
-            Action::CycleOptionAsAlt => "Cycle option as alt mode",
-            #[cfg(macos_platform)]
-            Action::CreateNewTab => "Create new tab",
             Action::RequestResize => "Request a resize",
         }
     }
@@ -614,10 +552,6 @@ const KEY_BINDINGS: &[Binding<&'static str>] = &[
     Binding::new("C", ModifiersState::CONTROL, Action::NextCursor),
     Binding::new("C", ModifiersState::ALT, Action::NextCustomCursor),
     Binding::new("Z", ModifiersState::CONTROL, Action::ToggleCursorVisibility),
-    #[cfg(macos_platform)]
-    Binding::new("T", ModifiersState::SUPER, Action::CreateNewTab),
-    #[cfg(macos_platform)]
-    Binding::new("O", ModifiersState::CONTROL, Action::CycleOptionAsAlt),
 ];
 
 const MOUSE_BINDINGS: &[Binding<MouseButton>] = &[
