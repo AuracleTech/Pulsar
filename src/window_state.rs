@@ -79,9 +79,6 @@ pub struct WindowState {
     /// The amount of pan of the window.
     pub panned: PhysicalPosition<f32>,
 
-    #[cfg(macos_platform)]
-    option_as_alt: OptionAsAlt,
-
     // Cursor states.
     named_idx: usize,
     custom_idx: usize,
@@ -119,8 +116,6 @@ impl WindowState {
                 .unwrap();
 
         Ok(Self {
-            #[cfg(macos_platform)]
-            option_as_alt: window.option_as_alt(),
             custom_idx: app.custom_cursors.len() - 1,
             cursor_grab: CursorGrabMode::None,
             named_idx,
@@ -224,18 +219,6 @@ impl WindowState {
         if let Err(err) = self.window.set_cursor_grab(self.cursor_grab) {
             panic!("Error setting cursor grab: {err}");
         }
-    }
-
-    #[cfg(macos_platform)]
-    fn cycle_option_as_alt(&mut self) {
-        self.option_as_alt = match self.option_as_alt {
-            OptionAsAlt::None => OptionAsAlt::OnlyLeft,
-            OptionAsAlt::OnlyLeft => OptionAsAlt::OnlyRight,
-            OptionAsAlt::OnlyRight => OptionAsAlt::Both,
-            OptionAsAlt::Both => OptionAsAlt::None,
-        };
-        // info!("Setting option as alt {:?}", self.option_as_alt);
-        self.window.set_option_as_alt(self.option_as_alt);
     }
 
     /// Swap the window dimensions with `request_inner_size`.
