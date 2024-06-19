@@ -6,6 +6,7 @@ use std::mem;
 pub struct Vertex {
     pub pos: [f32; 4],
     pub uv: [f32; 2],
+    pub color: [f32; 4],
 }
 
 #[derive(Debug)]

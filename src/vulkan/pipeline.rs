@@ -3,17 +3,6 @@ use crate::{model::Vertex, shaders::Shader};
 use ash::vk;
 use std::mem;
 
-#[macro_export]
-macro_rules! offset_of {
-    ($self:path, $field:ident) => {{
-        #[allow(unused_unsafe)]
-        unsafe {
-            let b: $self = mem::zeroed();
-            std::ptr::addr_of!(b.$field) as isize - std::ptr::addr_of!(b) as isize
-        }
-    }};
-}
-
 pub fn create_pipeline(
     device: &AAADevice,
     surface: &AAASurface,
@@ -54,13 +43,19 @@ pub fn create_pipeline(
             location: 0,
             binding: 0,
             format: vk::Format::R32G32B32A32_SFLOAT,
-            offset: offset_of!(Vertex, pos) as u32,
+            offset: mem::offset_of!(Vertex, pos) as u32,
         },
         vk::VertexInputAttributeDescription {
             location: 1,
             binding: 0,
             format: vk::Format::R32G32_SFLOAT,
-            offset: offset_of!(Vertex, uv) as u32,
+            offset: mem::offset_of!(Vertex, uv) as u32,
+        },
+        vk::VertexInputAttributeDescription {
+            location: 2,
+            binding: 0,
+            format: vk::Format::R32G32B32A32_SFLOAT,
+            offset: mem::offset_of!(Vertex, color) as u32,
         },
     ];
 

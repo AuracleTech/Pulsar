@@ -12,14 +12,13 @@ use ash::{
     vk::{self, DescriptorSetLayout},
 };
 use glam::Mat4;
-use rand::Rng;
 use std::{
     mem,
     sync::{Arc, Mutex},
 };
 
 pub struct AAAResources {
-    pub device: Arc<AAADevice>, // TEMP Remve from there should be in super
+    pub device: Arc<AAADevice>, // TEMP should be in super, everything uses it
 
     pub draw_command_buffer: vk::CommandBuffer,
     pub setup_command_buffer: vk::CommandBuffer,
@@ -201,9 +200,9 @@ impl AAAResources {
         );
 
         // MARK: UNIFORM BUFFER
-        let mut uniform = Mat4::IDENTITY;
+        let uniform = Mat4::IDENTITY;
         // TEMP: rotate UBO transfrom by 25% of PI
-        uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
+        // uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
 
         let (uniform_color_buffer, uniform_color_buffer_memory) =
             crate::vulkan::uniform::create_uniform_buffer(
@@ -314,82 +313,82 @@ impl AAAResources {
         };
 
         // MARK: REC TEXTURE
-        record_submit_commandbuffer(
-            &device,
-            setup_command_buffer,
-            setup_commands_reuse_fence,
-            swapchain.present_queue,
-            &[],
-            &[],
-            &[],
-            |device, texture_command_buffer| {
-                let texture_barrier = vk::ImageMemoryBarrier {
-                    dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-                    new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    image: texture_image,
-                    subresource_range: vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        level_count: 1,
-                        layer_count: 1,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                };
-                unsafe {
-                    device.ash.cmd_pipeline_barrier(
-                        texture_command_buffer,
-                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-                        vk::PipelineStageFlags::TRANSFER,
-                        vk::DependencyFlags::empty(),
-                        &[],
-                        &[],
-                        &[texture_barrier],
-                    )
-                };
-                let buffer_copy_regions = vk::BufferImageCopy::default()
-                    .image_subresource(
-                        vk::ImageSubresourceLayers::default()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .layer_count(1),
-                    )
-                    .image_extent(image_extent.into());
+        // record_submit_commandbuffer(
+        //     &device,
+        //     setup_command_buffer,
+        //     setup_commands_reuse_fence,
+        //     swapchain.present_queue,
+        //     &[],
+        //     &[],
+        //     &[],
+        //     |device, texture_command_buffer| {
+        //         let texture_barrier = vk::ImageMemoryBarrier {
+        //             dst_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+        //             new_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        //             image: texture_image,
+        //             subresource_range: vk::ImageSubresourceRange {
+        //                 aspect_mask: vk::ImageAspectFlags::COLOR,
+        //                 level_count: 1,
+        //                 layer_count: 1,
+        //                 ..Default::default()
+        //             },
+        //             ..Default::default()
+        //         };
+        //         unsafe {
+        //             device.ash.cmd_pipeline_barrier(
+        //                 texture_command_buffer,
+        //                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+        //                 vk::PipelineStageFlags::TRANSFER,
+        //                 vk::DependencyFlags::empty(),
+        //                 &[],
+        //                 &[],
+        //                 &[texture_barrier],
+        //             )
+        //         };
+        //         let buffer_copy_regions = vk::BufferImageCopy::default()
+        //             .image_subresource(
+        //                 vk::ImageSubresourceLayers::default()
+        //                     .aspect_mask(vk::ImageAspectFlags::COLOR)
+        //                     .layer_count(1),
+        //             )
+        //             .image_extent(image_extent.into());
 
-                unsafe {
-                    device.ash.cmd_copy_buffer_to_image(
-                        texture_command_buffer,
-                        image_buffer,
-                        texture_image,
-                        vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                        &[buffer_copy_regions],
-                    )
-                };
-                let texture_barrier_end = vk::ImageMemoryBarrier {
-                    src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
-                    dst_access_mask: vk::AccessFlags::SHADER_READ,
-                    old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                    new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                    image: texture_image,
-                    subresource_range: vk::ImageSubresourceRange {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        level_count: 1,
-                        layer_count: 1,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                };
-                unsafe {
-                    device.ash.cmd_pipeline_barrier(
-                        texture_command_buffer,
-                        vk::PipelineStageFlags::TRANSFER,
-                        vk::PipelineStageFlags::FRAGMENT_SHADER,
-                        vk::DependencyFlags::empty(),
-                        &[],
-                        &[],
-                        &[texture_barrier_end],
-                    )
-                };
-            },
-        );
+        //         unsafe {
+        //             device.ash.cmd_copy_buffer_to_image(
+        //                 texture_command_buffer,
+        //                 image_buffer,
+        //                 texture_image,
+        //                 vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        //                 &[buffer_copy_regions],
+        //             )
+        //         };
+        //         let texture_barrier_end = vk::ImageMemoryBarrier {
+        //             src_access_mask: vk::AccessFlags::TRANSFER_WRITE,
+        //             dst_access_mask: vk::AccessFlags::SHADER_READ,
+        //             old_layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+        //             new_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        //             image: texture_image,
+        //             subresource_range: vk::ImageSubresourceRange {
+        //                 aspect_mask: vk::ImageAspectFlags::COLOR,
+        //                 level_count: 1,
+        //                 layer_count: 1,
+        //                 ..Default::default()
+        //             },
+        //             ..Default::default()
+        //         };
+        //         unsafe {
+        //             device.ash.cmd_pipeline_barrier(
+        //                 texture_command_buffer,
+        //                 vk::PipelineStageFlags::TRANSFER,
+        //                 vk::PipelineStageFlags::FRAGMENT_SHADER,
+        //                 vk::DependencyFlags::empty(),
+        //                 &[],
+        //                 &[],
+        //                 &[texture_barrier_end],
+        //             )
+        //         };
+        //     },
+        // );
 
         // MARK: SAMPLER
         let sampler_info = vk::SamplerCreateInfo {
@@ -458,88 +457,146 @@ impl AAAResources {
                 dst_binding: 1,
                 descriptor_count: 1,
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                p_image_info: &tex_descriptor,
+                p_image_info: &tex_descriptor, 
                 ..Default::default()
             },
         ];
         unsafe { device.ash.update_descriptor_sets(&write_desc_sets, &[]) };
 
         // MARK: MESHES
-        // TODO seeded RNG only
-        let mut rng = rand::thread_rng();
-
         let mut registered_meshes = Vec::new();
 
-        for _ in 0..5 {
-            let mut vertices = Vec::new();
-            let mut indices = Vec::new();
-            for _ in 0..10 {
-                let x = rng.gen_range(-1.0..1.0);
-                let y = rng.gen_range(-1.0..1.0);
+        // use rand::Rng;
+        // let mut rng = rand::thread_rng();
+        // for _ in 0..5 {
+        //     let mut vertices = Vec::new();
+        //     let mut indices = Vec::new();
+        //     for _ in 0..10 {
+        //         let x = rng.gen_range(-1.0..1.0);
+        //         let y = rng.gen_range(-1.0..1.0);
 
-                vertices.extend(
-                    [
-                        Vertex {
-                            pos: [x, y, 1.0, 1.0],
-                            uv: [0.0, 0.0],
-                        },
-                        Vertex {
-                            pos: [x + 0.1, y, 1.0, 1.0],
-                            uv: [0.0, 1.0],
-                        },
-                        Vertex {
-                            pos: [x + 0.1, y - 0.1, 1.0, 1.0],
-                            uv: [1.0, 1.0],
-                        },
-                        Vertex {
-                            pos: [x, y - 0.1, 1.0, 1.0],
-                            uv: [1.0, 0.0],
-                        },
-                    ]
-                    .iter(),
-                );
+        //         vertices.extend(
+        //             [
+        //                 Vertex {
+        //                     pos: [x, y, 1.0, 1.0],
+        //                     uv: [0.0, 0.0],
+        //                 },
+        //                 Vertex {
+        //                     pos: [x + 0.1, y, 1.0, 1.0],
+        //                     uv: [0.0, 1.0],
+        //                 },
+        //                 Vertex {
+        //                     pos: [x + 0.1, y - 0.1, 1.0, 1.0],
+        //                     uv: [1.0, 1.0],
+        //                 },
+        //                 Vertex {
+        //                     pos: [x, y - 0.1, 1.0, 1.0],
+        //                     uv: [1.0, 0.0],
+        //                 },
+        //             ]
+        //             .iter(),
+        //         );
 
-                let offset = vertices.len() as u32 - 4;
-                let quad_indices = vec![
-                    offset,
-                    offset + 1,
-                    offset + 2,
-                    offset,
-                    offset + 2,
-                    offset + 3,
-                ];
+        //         let offset = vertices.len() as u32 - 4;
+        //         let quad_indices = vec![
+        //             offset,
+        //             offset + 1,
+        //             offset + 2,
+        //             offset,
+        //             offset + 2,
+        //             offset + 3,
+        //         ];
 
-                indices.extend(quad_indices);
-            }
-            let mesh = Mesh { vertices, indices };
-            let registered_mesh = mesh.register(&device, &device_memory_properties);
-            registered_meshes.push(registered_mesh);
-        }
+        //         indices.extend(quad_indices);
+        //     }
+        //     let mesh = Mesh { vertices, indices };
+        //     let registered_mesh = mesh.register(&device, &device_memory_properties);
+        //     registered_meshes.push(registered_mesh);
+        // }
 
-        // MARK: SQUARE
-        let square = Mesh {
+        // MARK: LEFT_SCREEN_COVER
+        let left_cover_color = [0.08627450980392157, 0.08627450980392157, 0.13333333333333333, 1.0];
+        let left_cover = Mesh {
             vertices: vec![
                 Vertex {
                     pos: [-1.0, -1.0, 0.0, 1.0],
                     uv: [0.0, 0.0],
+                    color: left_cover_color,
                 },
                 Vertex {
                     pos: [-1.0, 1.0, 0.0, 1.0],
                     uv: [0.0, 1.0],
+                    color: left_cover_color,
                 },
                 Vertex {
-                    pos: [1.0, 1.0, 0.0, 1.0],
+                    pos: [0.0, 1.0, 0.0, 1.0],
                     uv: [1.0, 1.0],
+                    color: left_cover_color,
                 },
                 Vertex {
-                    pos: [1.0, -1.0, 0.0, 1.0],
+                    pos: [0.0, -1.0, 0.0, 1.0],
                     uv: [1.0, 0.0],
+                    color: left_cover_color,
                 },
             ],
             indices: vec![0u32, 1, 2, 2, 3, 0],
         };
-        let registered_square = square.register(&device, &device_memory_properties);
+        let registered_square = left_cover.register(&device, &device_memory_properties);
         registered_meshes.push(registered_square);
+        // MARK: RIGHT_SCREEN_COVER
+        let right_cover_color = [0.13333333333333333, 0.13333333333333333, 0.21176470588235294, 1.0];
+        let right_cover = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: [0.0, -1.0, 0.0, 1.0],
+                    uv: [0.0, 0.0],
+                    color: right_cover_color,
+                },
+                Vertex {
+                    pos: [0.0, 1.0, 0.0, 1.0],
+                    uv: [0.0, 1.0],
+                    color: right_cover_color,
+                },
+                Vertex {
+                    pos: [1.0, 1.0, 0.0, 1.0],
+                    uv: [1.0, 1.0],
+                    color: right_cover_color,
+                },
+                Vertex {
+                    pos: [1.0, -1.0, 0.0, 1.0],
+                    uv: [1.0, 0.0],
+                    color: right_cover_color,
+                },
+            ],
+            indices: vec![0u32, 1, 2, 2, 3, 0],
+        };
+        let registered_square = right_cover.register(&device, &device_memory_properties);
+        registered_meshes.push(registered_square);
+
+        // MARK: SQUARE
+        // let square = Mesh {
+        //     vertices: vec![
+        //         Vertex {
+        //             pos: [-1.0, -1.0, 0.0, 1.0],
+        //             uv: [0.0, 0.0],
+        //         },
+        //         Vertex {
+        //             pos: [-1.0, 1.0, 0.0, 1.0],
+        //             uv: [0.0, 1.0],
+        //         },
+        //         Vertex {
+        //             pos: [1.0, 1.0, 0.0, 1.0],
+        //             uv: [1.0, 1.0],
+        //         },
+        //         Vertex {
+        //             pos: [1.0, -1.0, 0.0, 1.0],
+        //             uv: [1.0, 0.0],
+        //         },
+        //     ],
+        //     indices: vec![0u32, 1, 2, 2, 3, 0],
+        // };
+        // let registered_square = square.register(&device, &device_memory_properties);
+        // registered_meshes.push(registered_square);
 
         Self {
             device: Arc::new(device),

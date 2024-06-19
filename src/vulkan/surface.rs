@@ -133,7 +133,7 @@ impl AAASurface {
     pub fn render(&self, resources: &mut AAAResources, metrics: &mut Metrics) -> bool {
         metrics.start_frame();
 
-        let force_throttle = true;  // TEMP
+        let force_throttle = false; // TEMP
         if force_throttle {
             std::thread::sleep(std::time::Duration::from_millis(32));
         }
@@ -233,7 +233,7 @@ impl AAASurface {
                         1,
                         0,
                         0,
-                        1,
+                        0, // TEST why was it to 1 before?
                     );
                 }
 
