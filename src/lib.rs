@@ -1,4 +1,5 @@
 pub mod app;
+mod camera;
 mod input_manager;
 mod metrics;
 mod model;
