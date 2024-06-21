@@ -93,6 +93,11 @@ impl AAAGraphics {
         .unwrap();
 
         self.resources.register_depth_image_memory();
+
+        self.resources.camera.perspective.aspect_ratio = width as f32 / height as f32;
+        self.resources.camera.orthographic.right = width as f32;
+        self.resources.camera.orthographic.top = height as f32;
+        self.resources.camera.update();
     }
 
     pub fn destroy_swapchain(&self) {

@@ -6,12 +6,15 @@ use super::{
     views::find_memorytype_index,
     AAABase,
 };
-use crate::model::{Mesh, RegisteredMesh, Vertex};
+use crate::{
+    camera::{Camera, OrthographicProjection, PerspectiveProjection},
+    model::{Mesh, RegisteredMesh, Vertex},
+};
 use ash::{
     util::Align,
     vk::{self, DescriptorSetLayout},
 };
-use glam::Mat4;
+use glam::{Mat4, Vec3};
 use std::{
     mem,
     sync::{Arc, Mutex},
@@ -56,8 +59,6 @@ pub struct AAAResources {
     pub renderpass: vk::RenderPass,
     pub pool: vk::CommandPool,
 
-    pub uniform: Mat4,
-
     pub swapchain_loader: AAASwapchainLoader,
     pub swapchain: AAASwapchain,
 
@@ -70,6 +71,9 @@ pub struct AAAResources {
 
     pub registered_meshes: Vec<RegisteredMesh>,
     pub device_memory_properties: vk::PhysicalDeviceMemoryProperties,
+
+    pub uniform: Mat4,
+    pub camera: Camera,
 }
 
 impl AAAResources {
@@ -202,7 +206,8 @@ impl AAAResources {
         // MARK: UNIFORM BUFFER
         let uniform = Mat4::IDENTITY;
         // TEMP: rotate UBO transfrom by 25% of PI
-        // uniform *= Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
+        // uniform *=
+        //     Mat4::from_euler(glam::EulerRot::XYZ, 0.0, 0.0, std::f32::consts::PI / 4.0);
 
         let (uniform_color_buffer, uniform_color_buffer_memory) =
             crate::vulkan::uniform::create_uniform_buffer(
@@ -457,7 +462,7 @@ impl AAAResources {
                 dst_binding: 1,
                 descriptor_count: 1,
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
-                p_image_info: &tex_descriptor, 
+                p_image_info: &tex_descriptor,
                 ..Default::default()
             },
         ];
@@ -514,65 +519,6 @@ impl AAAResources {
         //     registered_meshes.push(registered_mesh);
         // }
 
-        // MARK: LEFT_SCREEN_COVER
-        let left_cover_color = [0.08627450980392157, 0.08627450980392157, 0.13333333333333333, 1.0];
-        let left_cover = Mesh {
-            vertices: vec![
-                Vertex {
-                    pos: [-1.0, -1.0, 0.0, 1.0],
-                    uv: [0.0, 0.0],
-                    color: left_cover_color,
-                },
-                Vertex {
-                    pos: [-1.0, 1.0, 0.0, 1.0],
-                    uv: [0.0, 1.0],
-                    color: left_cover_color,
-                },
-                Vertex {
-                    pos: [0.0, 1.0, 0.0, 1.0],
-                    uv: [1.0, 1.0],
-                    color: left_cover_color,
-                },
-                Vertex {
-                    pos: [0.0, -1.0, 0.0, 1.0],
-                    uv: [1.0, 0.0],
-                    color: left_cover_color,
-                },
-            ],
-            indices: vec![0u32, 1, 2, 2, 3, 0],
-        };
-        let registered_square = left_cover.register(&device, &device_memory_properties);
-        registered_meshes.push(registered_square);
-        // MARK: RIGHT_SCREEN_COVER
-        let right_cover_color = [0.13333333333333333, 0.13333333333333333, 0.21176470588235294, 1.0];
-        let right_cover = Mesh {
-            vertices: vec![
-                Vertex {
-                    pos: [0.0, -1.0, 0.0, 1.0],
-                    uv: [0.0, 0.0],
-                    color: right_cover_color,
-                },
-                Vertex {
-                    pos: [0.0, 1.0, 0.0, 1.0],
-                    uv: [0.0, 1.0],
-                    color: right_cover_color,
-                },
-                Vertex {
-                    pos: [1.0, 1.0, 0.0, 1.0],
-                    uv: [1.0, 1.0],
-                    color: right_cover_color,
-                },
-                Vertex {
-                    pos: [1.0, -1.0, 0.0, 1.0],
-                    uv: [1.0, 0.0],
-                    color: right_cover_color,
-                },
-            ],
-            indices: vec![0u32, 1, 2, 2, 3, 0],
-        };
-        let registered_square = right_cover.register(&device, &device_memory_properties);
-        registered_meshes.push(registered_square);
-
         // MARK: SQUARE
         // let square = Mesh {
         //     vertices: vec![
@@ -597,6 +543,133 @@ impl AAAResources {
         // };
         // let registered_square = square.register(&device, &device_memory_properties);
         // registered_meshes.push(registered_square);
+
+        // MARK: UI COVER
+        let ui_vertices = vec![
+            Vertex {
+                pos: [0.0, 0.0, 0.0, 1.0],
+                uv: [0.0, 0.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+            Vertex {
+                pos: [width as f32, 0.0, 0.0, 1.0],
+                uv: [1.0, 0.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+            Vertex {
+                pos: [width as f32, height as f32, 0.0, 1.0],
+                uv: [1.0, 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+            Vertex {
+                pos: [0.0, height as f32, 0.0, 1.0],
+                uv: [0.0, 1.0],
+                color: [1.0, 1.0, 1.0, 1.0],
+            },
+        ];
+        let ui_indices = vec![0u32, 1, 2, 2, 3, 0];
+        let ui_cover = Mesh {
+            vertices: ui_vertices,
+            indices: ui_indices,
+            transform: Mat4::IDENTITY,
+        };
+        let registered_ui_cover = ui_cover.register(&device, &device_memory_properties);
+        registered_meshes.push(registered_ui_cover);
+
+        // MARK: LEFT_SCREEN_COVER
+        let left_cover_color = [
+            0.08627450980392157,
+            0.08627450980392157,
+            0.13333333333333333,
+            1.0,
+        ];
+        let left_cover = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: [-1.0, -1.0, 0.0, 1.0],
+                    uv: [0.0, 0.0],
+                    color: left_cover_color,
+                },
+                Vertex {
+                    pos: [-1.0, 1.0, 0.0, 1.0],
+                    uv: [0.0, 1.0],
+                    color: left_cover_color,
+                },
+                Vertex {
+                    pos: [0.0, 1.0, 0.0, 1.0],
+                    uv: [1.0, 1.0],
+                    color: left_cover_color,
+                },
+                Vertex {
+                    pos: [0.0, -1.0, 0.0, 1.0],
+                    uv: [1.0, 0.0],
+                    color: left_cover_color,
+                },
+            ],
+            indices: vec![0u32, 1, 2, 2, 3, 0],
+            transform: Mat4::from_translation(glam::Vec3::new(0.0, 0.2, 0.0)),
+        };
+        let registered_square = left_cover.register(&device, &device_memory_properties);
+        registered_meshes.push(registered_square);
+
+        // MARK: RIGHT_SCREEN_COVER
+        let right_cover_color = [
+            0.13333333333333333,
+            0.13333333333333333,
+            0.21176470588235294,
+            1.0,
+        ];
+        let right_cover = Mesh {
+            vertices: vec![
+                Vertex {
+                    pos: [0.0, -1.0, 0.0, 1.0],
+                    uv: [0.0, 0.0],
+                    color: right_cover_color,
+                },
+                Vertex {
+                    pos: [0.0, 1.0, 0.0, 1.0],
+                    uv: [0.0, 1.0],
+                    color: right_cover_color,
+                },
+                Vertex {
+                    pos: [1.0, 1.0, 0.0, 1.0],
+                    uv: [1.0, 1.0],
+                    color: right_cover_color,
+                },
+                Vertex {
+                    pos: [1.0, -1.0, 0.0, 1.0],
+                    uv: [1.0, 0.0],
+                    color: right_cover_color,
+                },
+            ],
+            indices: vec![0u32, 1, 2, 2, 3, 0],
+            transform: Mat4::from_translation(glam::Vec3::new(0.0, -0.2, 0.0)),
+        };
+        let registered_square = right_cover.register(&device, &device_memory_properties);
+        registered_meshes.push(registered_square);
+
+        // MARK: Cameras
+        let ui_projection = OrthographicProjection::new(
+            0.0,
+            width as f32,
+            0.0,
+            height as f32,
+            -1.0,
+            1.0,
+            Mat4::IDENTITY,
+        );
+        let worldspace_projection = PerspectiveProjection::new(
+            std::f32::consts::PI / 4.0,
+            width as f32 / height as f32,
+            0.01,
+            1000.0,
+            Mat4::from_translation(glam::Vec3::new(0.0, 0.0, -4.0)),
+        );
+        let camera = Camera::new(
+            Vec3::new(0.0, 0.0, 4.0),
+            ui_projection,
+            worldspace_projection,
+        );
 
         Self {
             device: Arc::new(device),
@@ -637,8 +710,6 @@ impl AAAResources {
             renderpass,
             pool,
 
-            uniform,
-
             swapchain_loader,
             swapchain,
 
@@ -652,6 +723,9 @@ impl AAAResources {
             registered_meshes,
 
             device_memory_properties,
+
+            uniform,
+            camera,
         }
     }
 

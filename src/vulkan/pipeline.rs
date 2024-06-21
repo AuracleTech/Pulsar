@@ -1,7 +1,34 @@
 use super::{device::AAADevice, surface::AAASurface};
 use crate::{model::Vertex, shaders::Shader};
 use ash::vk;
+use glam::Mat4;
 use std::mem;
+
+fn create_pipeline_layout(
+    device: &AAADevice,
+    desc_set_layouts: [vk::DescriptorSetLayout; 1],
+) -> vk::PipelineLayout {
+    let push_constant_range = vk::PushConstantRange {
+        stage_flags: vk::ShaderStageFlags::VERTEX,
+        offset: 0,
+        size: std::mem::size_of::<Mat4>() as u32,
+    };
+
+    let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo {
+        set_layout_count: desc_set_layouts.len() as u32,
+        p_set_layouts: desc_set_layouts.as_ptr(),
+        push_constant_range_count: 1,
+        p_push_constant_ranges: &push_constant_range,
+        ..Default::default()
+    };
+
+    unsafe {
+        device
+            .ash
+            .create_pipeline_layout(&pipeline_layout_create_info, None)
+            .expect("Failed to create pipeline layout!")
+    }
+}
 
 pub fn create_pipeline(
     device: &AAADevice,
@@ -25,13 +52,7 @@ pub fn create_pipeline(
         frag_shader.pipeline_shader_stage_create_info,
     ];
 
-    let layout_create_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&desc_set_layouts);
-    let pipeline_layout = unsafe {
-        device
-            .ash
-            .create_pipeline_layout(&layout_create_info, None)
-            .unwrap()
-    };
+    let pipeline_layout = create_pipeline_layout(&device, desc_set_layouts);
 
     let vertex_input_binding_descriptions = [vk::VertexInputBindingDescription {
         binding: 0,

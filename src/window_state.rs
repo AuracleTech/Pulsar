@@ -231,6 +231,7 @@ impl WindowState {
 
         if let Some(new_inner_size) = self.window.request_inner_size(inner_size) {
             if old_inner_size != new_inner_size {
+                println!("Swapped dimensions to {:?}", new_inner_size);
                 self.resize(new_inner_size)
             }
         } else {
@@ -252,24 +253,21 @@ impl WindowState {
     }
 
     pub fn resize(&mut self, size: PhysicalSize<u32>) {
-        #[cfg(not(any(android_platform, ios_platform)))]
-        {
-            self.render_thread_close_join();
+        self.render_thread_close_join();
 
-            let width = size.width;
-            let height = size.height;
+        let width = size.width;
+        let height = size.height;
 
-            if width == 0 || height == 0 {
-                return;
-            }
-
-            let graphics_locked = self.graphics.clone().unwrap();
-            let mut graphics = graphics_locked.lock().unwrap();
-            graphics.recreate_swapchain(width, height);
-            drop(graphics);
-
-            self.spawn_render_thread_and_render();
+        if width == 0 || height == 0 {
+            return;
         }
+
+        let graphics_locked = self.graphics.clone().unwrap();
+        let mut graphics_lock = graphics_locked.lock().unwrap();
+        graphics_lock.recreate_swapchain(width, height);
+        drop(graphics_lock);
+
+        self.spawn_render_thread_and_render();
     }
 
     pub fn set_theme(&mut self, theme: Theme) {

@@ -1,5 +1,5 @@
 use super::{device::AAADevice, surface_resources::AAAResources, AAABase};
-use crate::metrics::Metrics;
+use crate::{metrics::Metrics, model::mat4_to_bytes};
 use ash::{khr::surface, util::Align, vk};
 use glam::Mat4;
 use rwh_06::{HasDisplayHandle, HasWindowHandle};
@@ -215,6 +215,16 @@ impl AAASurface {
                     .cmd_set_scissor(draw_command_buffer, 0, &resources.scissors);
 
                 for registered_mesh in &resources.registered_meshes {
+                    let pvm = resources.camera.perspective.projection_view
+                        * registered_mesh.mesh.transform;
+
+                    device.ash.cmd_push_constants(
+                        draw_command_buffer,
+                        resources.pipeline_layout,
+                        vk::ShaderStageFlags::VERTEX,
+                        0,
+                        mat4_to_bytes(&pvm),
+                    );
                     device.ash.cmd_bind_vertex_buffers(
                         draw_command_buffer,
                         0,
@@ -233,7 +243,7 @@ impl AAASurface {
                         1,
                         0,
                         0,
-                        0, // TEST why was it to 1 before?
+                        0,
                     );
                 }
 

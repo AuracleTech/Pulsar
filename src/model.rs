@@ -1,5 +1,6 @@
 use crate::vulkan::{device::AAADevice, views::find_memorytype_index};
 use ash::{util::Align, vk};
+use glam::Mat4;
 use std::mem;
 
 #[derive(Clone, Debug, Copy)]
@@ -13,6 +14,18 @@ pub struct Vertex {
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+
+    pub transform: glam::Mat4,
+}
+
+// TODO make own math lib I guess
+pub fn mat4_to_bytes(matrix: &Mat4) -> &[u8] {
+    unsafe {
+        std::slice::from_raw_parts(
+            matrix as *const Mat4 as *const u8,
+            std::mem::size_of::<Mat4>(),
+        )
+    }
 }
 
 #[derive(Debug)]

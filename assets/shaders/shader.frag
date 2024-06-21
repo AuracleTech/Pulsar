@@ -4,12 +4,12 @@
 
 // layout (binding = 1) uniform sampler2D samplerColor;
 
-layout (binding = 0) uniform UBO{
-    mat4 transform;
-} ubo;
+// layout (binding = 0) uniform UBO{
+//     mat4 transform;
+// } ubo;
 
 
-layout (location = 0) in vec2 o_uv;
+// layout (location = 0) in vec2 o_uv;
 layout (location = 1) in vec4 o_color;
 
 layout (location = 0) out vec4 uFragColor;
