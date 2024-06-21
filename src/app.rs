@@ -412,7 +412,6 @@ impl ApplicationHandler<UserEvent> for Application {
         }
     }
 
-    #[cfg(not(any(android_platform, ios_platform)))]
     fn exiting(&mut self, _event_loop: &ActiveEventLoop) {
         //
     }
