@@ -69,7 +69,8 @@ pub struct AAAResources {
     pub descriptor_sets: Vec<vk::DescriptorSet>,
     pub graphic_pipeline: vk::Pipeline,
 
-    pub registered_meshes: Vec<RegisteredMesh>,
+    pub projection_registered_meshes: Vec<RegisteredMesh>,
+    pub orthographic_registered_meshes: Vec<RegisteredMesh>,
     pub device_memory_properties: vk::PhysicalDeviceMemoryProperties,
 
     pub uniform: Mat4,
@@ -469,7 +470,8 @@ impl AAAResources {
         unsafe { device.ash.update_descriptor_sets(&write_desc_sets, &[]) };
 
         // MARK: MESHES
-        let mut registered_meshes = Vec::new();
+        let mut projection_registered_meshes = Vec::new();
+        let mut orthographic_registered_meshes = Vec::new();
 
         // use rand::Rng;
         // let mut rng = rand::thread_rng();
@@ -545,6 +547,8 @@ impl AAAResources {
         // registered_meshes.push(registered_square);
 
         // MARK: UI COVER
+        let ui_width = 350.0;
+        let ui_height = 600.0;
         let ui_vertices = vec![
             Vertex {
                 pos: [0.0, 0.0, 0.0, 1.0],
@@ -552,17 +556,17 @@ impl AAAResources {
                 color: [1.0, 1.0, 1.0, 1.0],
             },
             Vertex {
-                pos: [width as f32, 0.0, 0.0, 1.0],
+                pos: [ui_width, 0.0, 0.0, 1.0],
                 uv: [1.0, 0.0],
                 color: [1.0, 1.0, 1.0, 1.0],
             },
             Vertex {
-                pos: [width as f32, height as f32, 0.0, 1.0],
+                pos: [ui_width, ui_height, 0.0, 1.0],
                 uv: [1.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
             },
             Vertex {
-                pos: [0.0, height as f32, 0.0, 1.0],
+                pos: [0.0, ui_height, 0.0, 1.0],
                 uv: [0.0, 1.0],
                 color: [1.0, 1.0, 1.0, 1.0],
             },
@@ -574,15 +578,16 @@ impl AAAResources {
             transform: Mat4::IDENTITY,
         };
         let registered_ui_cover = ui_cover.register(&device, &device_memory_properties);
-        registered_meshes.push(registered_ui_cover);
+        orthographic_registered_meshes.push(registered_ui_cover);
 
         // MARK: LEFT_SCREEN_COVER
-        let left_cover_color = [
-            0.08627450980392157,
-            0.08627450980392157,
-            0.13333333333333333,
-            1.0,
-        ];
+        // let left_cover_color = [
+        //     0.08627450980392157,
+        //     0.08627450980392157,
+        //     0.13333333333333333,
+        //     1.0,
+        // ];
+        let left_cover_color = [1.0, 1.0, 0.0, 1.0];
         let left_cover = Mesh {
             vertices: vec![
                 Vertex {
@@ -610,15 +615,16 @@ impl AAAResources {
             transform: Mat4::from_translation(glam::Vec3::new(0.0, 0.2, 0.0)),
         };
         let registered_square = left_cover.register(&device, &device_memory_properties);
-        registered_meshes.push(registered_square);
+        projection_registered_meshes.push(registered_square);
 
         // MARK: RIGHT_SCREEN_COVER
-        let right_cover_color = [
-            0.13333333333333333,
-            0.13333333333333333,
-            0.21176470588235294,
-            1.0,
-        ];
+        // let right_cover_color = [
+        //     0.13333333333333333,
+        //     0.13333333333333333,
+        //     0.21176470588235294,
+        //     1.0,
+        // ];
+        let right_cover_color = [0.0, 1.0, 1.0, 1.0];
         let right_cover = Mesh {
             vertices: vec![
                 Vertex {
@@ -646,7 +652,7 @@ impl AAAResources {
             transform: Mat4::from_translation(glam::Vec3::new(0.0, -0.2, 0.0)),
         };
         let registered_square = right_cover.register(&device, &device_memory_properties);
-        registered_meshes.push(registered_square);
+        projection_registered_meshes.push(registered_square);
 
         // MARK: Cameras
         let ui_projection = OrthographicProjection::new(
@@ -720,7 +726,8 @@ impl AAAResources {
             descriptor_sets,
             graphic_pipeline,
 
-            registered_meshes,
+            projection_registered_meshes,
+            orthographic_registered_meshes,
 
             device_memory_properties,
 
@@ -811,7 +818,7 @@ impl Drop for AAAResources {
                 .destroy_image_view(self.tex_image_view, None);
             self.device.ash.destroy_image(self.texture_image, None);
 
-            for registered_mesh in self.registered_meshes.iter() {
+            for registered_mesh in self.projection_registered_meshes.iter() {
                 self.device
                     .ash
                     .free_memory(registered_mesh.index_buffer_memory, None);
